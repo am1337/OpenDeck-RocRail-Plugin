@@ -1,0 +1,14 @@
+{
+  "name": "rocrail-loco-control",
+  "version": "1.0.0",
+  "description": "OpenAction plugin for OpenDeck to control Rocrail model trains",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5",
+    "ws": "^8.18.0"
+  }
+}

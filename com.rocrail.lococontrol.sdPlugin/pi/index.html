@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rocrail Loco Control</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 12px; margin: 0; font-size: 12px; }
+    label { display: block; margin-top: 8px; font-weight: 500; }
+    input { width: 100%; padding: 6px; margin-top: 2px; box-sizing: border-box; }
+    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #333; }
+    .section:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Rocrail Server</h3>
+    <label>Host</label>
+    <input type="text" id="host" placeholder="127.0.0.1">
+    <label>Port</label>
+    <input type="number" id="port" placeholder="8051">
+  </div>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Loco list (dial)</h3>
+    <label>Scroll when rotating OLED, speed, or list-scroll dial (loco list / function list)</label>
+    <select id="locoListDialScroll">
+      <option value="single">One loco per dial step</option>
+      <option value="page">One page per step (same count as visible OLED buttons)</option>
+    </select>
+  </div>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Loco images</h3>
+    <label>HTTP port (loco images)</label>
+    <input type="number" id="httpPort" placeholder="8080">
+    <label>HTTP base path (use / for root: http://host:port/&lt;filename&gt;)</label>
+    <input type="text" id="httpBasePath" placeholder="/">
+    <label>Local image directory (fallback)</label>
+    <input type="text" id="localImageDir" placeholder="/path/to/rocrail/images">
+  </div>
+  <script>
+    let ws, uuid, action;
+
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      uuid = inUUID;
+      const info = JSON.parse(inInfo || '{}');
+      action = inActionInfo ? JSON.parse(inActionInfo) : null;
+
+      ws = new WebSocket('ws://127.0.0.1:' + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        // For property inspectors, the context should be the inspector UUID.
+        ws.send(JSON.stringify({ event: 'getGlobalSettings', context: uuid }));
+      };
+      ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.event === 'didReceiveGlobalSettings') {
+          const s = msg.payload?.settings || {};
+          document.getElementById('host').value = s.host || '127.0.0.1';
+          document.getElementById('port').value = s.port || '8051';
+          document.getElementById('httpPort').value = s.httpPort || '8080';
+          document.getElementById('httpBasePath').value = s.httpBasePath || '/';
+          document.getElementById('localImageDir').value = s.localImageDir || '';
+          document.getElementById('locoListDialScroll').value = s.locoListDialScroll || 'single';
+        }
+      };
+    }
+
+    document.getElementById('host').addEventListener('change', saveGlobal);
+    document.getElementById('port').addEventListener('change', saveGlobal);
+    document.getElementById('httpPort').addEventListener('change', saveGlobal);
+    document.getElementById('httpBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('localImageDir').addEventListener('change', saveGlobal);
+    document.getElementById('locoListDialScroll').addEventListener('change', saveGlobal);
+
+    function saveGlobal() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        event: 'setGlobalSettings',
+        context: uuid,
+        payload: {
+          host: document.getElementById('host').value || '127.0.0.1',
+          port: document.getElementById('port').value || '8051',
+          httpPort: document.getElementById('httpPort').value || '8080',
+          httpBasePath: document.getElementById('httpBasePath').value || '/',
+          localImageDir: document.getElementById('localImageDir').value || '',
+          locoListDialScroll: document.getElementById('locoListDialScroll').value || 'single'
+        }
+      }));
+    }
+  </script>
+</body>
+</html>

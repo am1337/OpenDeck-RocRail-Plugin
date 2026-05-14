@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72">
+  <rect width="72" height="72" rx="8" fill="#2d2d44"/>
+  <!-- Full circle -->
+  <circle cx="36" cy="36" r="20" stroke="#4ecdc4" stroke-width="3" fill="none"/>
+  <!-- Needle to 10 o'clock (pivot at center) -->
+  <path d="M 36 36 L 22 28" stroke="#4ecdc4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

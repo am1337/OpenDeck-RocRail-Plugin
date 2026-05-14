@@ -1,0 +1,141 @@
+{
+  "SDKVersion": 2,
+  "Name": "Rocrail Loco Control",
+  "Author": "OpenDeck-RocRail",
+  "Version": "1.0.0",
+  "Description": "Control Rocrail model trains from your Stream Deck",
+  "Icon": "icon",
+  "Category": "Rocrail",
+  "CategoryIcon": "icon",
+  "PropertyInspectorPath": "pi/index.html",
+  "CodePath": "index.js",
+  "Nodejs": {
+    "Version": "20"
+  },
+  "Software": {
+    "MinimumVersion": "6.4"
+  },
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "13" },
+    { "Platform": "windows", "MinimumVersion": "10" },
+    { "Platform": "linux", "MinimumVersion": "0" }
+  ],
+  "UUID": "com.rocrail.lococontrol",
+  "Actions": [
+    {
+      "Name": "Rocrail OLED Button",
+      "UUID": "com.rocrail.lococontrol.oled",
+      "Tooltip": "OLED button for loco list, functions, or speed display",
+      "Icon": "actions/oled",
+      "Controllers": ["Keypad", "Encoder"],
+      "States": [
+        {
+          "Image": "actions/oled",
+          "Name": "Function off",
+          "Title": "",
+          "ShowTitle": true,
+          "TitleAlignment": "middle",
+          "FontSize": 11,
+          "TitleColor": "#FFFFFFFF"
+        },
+        {
+          "Image": "actions/oled-on",
+          "Name": "Function on",
+          "Title": "",
+          "ShowTitle": true,
+          "TitleAlignment": "middle",
+          "FontSize": 11,
+          "TitleColor": "#FF000000"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Direction Fwd",
+      "UUID": "com.rocrail.lococontrol.dirfwd",
+      "Tooltip": "Set loco direction forward",
+      "Icon": "actions/dirfwd",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/dirfwd"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Direction Rev",
+      "UUID": "com.rocrail.lococontrol.dirrev",
+      "Tooltip": "Set loco direction reverse",
+      "Icon": "actions/dirrev",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/dirrev"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Speed Dial",
+      "UUID": "com.rocrail.lococontrol.speed",
+      "Tooltip": "Dial: rotate for speed, press to stop",
+      "Icon": "actions/speed",
+      "Controllers": ["Encoder", "Keypad"],
+      "States": [
+        {
+          "Image": "actions/speed"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail List Scroll Dial",
+      "UUID": "com.rocrail.lococontrol.scroll",
+      "Tooltip": "Encoder: scroll loco list (wrap) or function list in throttle; same step mode as global setting for OLED/speed dial",
+      "Icon": "actions/scroll",
+      "Controllers": ["Encoder"],
+      "States": [
+        {
+          "Image": "actions/scroll",
+          "Title": "Locos",
+          "ShowTitle": true,
+          "TitleAlignment": "middle",
+          "FontSize": 12
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Back",
+      "UUID": "com.rocrail.lococontrol.back",
+      "Tooltip": "Return to loco list (stops current loco)",
+      "Icon": "actions/back",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/back"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Scroll Up",
+      "UUID": "com.rocrail.lococontrol.scrollup",
+      "Tooltip": "Scroll up through loco or function list",
+      "Icon": "actions/scrollup",
+      "Controllers": ["Keypad", "Encoder"],
+      "States": [
+        {
+          "Image": "actions/scrollup"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Scroll Down",
+      "UUID": "com.rocrail.lococontrol.scrolldown",
+      "Tooltip": "Scroll down through loco or function list",
+      "Icon": "actions/scrolldown",
+      "Controllers": ["Keypad", "Encoder"],
+      "States": [
+        {
+          "Image": "actions/scrolldown"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 72 72"
+   width="72"
+   height="72"
+   version="1.1"
+   id="svg22"
+   sodipodi:docname="icon.svg"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs26" />
+  <sodipodi:namedview
+     id="namedview24"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showgrid="false"
+     inkscape:zoom="14.263889"
+     inkscape:cx="46.516066"
+     inkscape:cy="35.263875"
+     inkscape:window-width="2560"
+     inkscape:window-height="1410"
+     inkscape:window-x="2560"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg22" />
+  <rect
+     width="72"
+     height="72"
+     rx="8"
+     fill="#1a1a2e"
+     id="rect2" />
+  <!-- Steam train locomotive -->
+  <!-- Wheels -->
+  <circle
+     cx="24"
+     cy="54"
+     r="6"
+     stroke="#4ecdc4"
+     stroke-width="2"
+     fill="none"
+     id="circle4" />
+  <circle
+     cx="48"
+     cy="54"
+     r="6"
+     stroke="#4ecdc4"
+     stroke-width="2"
+     fill="none"
+     id="circle6" />
+  <!-- Boiler/body -->
+  <rect
+     x="14.214216"
+     y="31.859785"
+     width="36"
+     height="18"
+     rx="3"
+     stroke="#4ecdc4"
+     stroke-width="2"
+     fill="none"
+     id="rect8"
+     style="stroke-width:2;stroke-dasharray:none" />
+  <!-- Cab -->
+  <rect
+     x="45.996105"
+     y="25.839252"
+     width="16"
+     height="24"
+     rx="2"
+     stroke="#4ecdc4"
+     stroke-width="2"
+     fill="none"
+     id="rect10" />
+  <!-- Smoke stack -->
+  <rect
+     x="20"
+     y="20"
+     width="10"
+     height="14"
+     rx="2"
+     stroke="#4ecdc4"
+     stroke-width="2"
+     fill="none"
+     id="rect12" />
+  <!-- Smoke - cloudy puffs -->
+  <ellipse
+     cx="22"
+     cy="16"
+     rx="5"
+     ry="4"
+     fill="#4ecdc4"
+     opacity="0.5"
+     id="ellipse14" />
+  <ellipse
+     cx="28"
+     cy="10"
+     rx="6"
+     ry="5"
+     fill="#4ecdc4"
+     opacity="0.45"
+     id="ellipse16" />
+  <ellipse
+     cx="25"
+     cy="14"
+     rx="4"
+     ry="3"
+     fill="#4ecdc4"
+     opacity="0.55"
+     id="ellipse18" />
+  <ellipse
+     cx="32"
+     cy="12"
+     rx="4"
+     ry="4"
+     fill="#4ecdc4"
+     opacity="0.4"
+     id="ellipse20" />
+</svg>
