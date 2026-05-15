@@ -8,7 +8,7 @@ This is the initial version of the plugin mainly created with Cursor AI and test
 
 - [OpenDeck](https://github.com/nekename/OpenDeck)
 - [Rocrail](https://wiki.rocrail.net) (server running, default port 8051)
-- Node.js 18+ (for running the plugin)
+- Node.js 20+ (for running the plugin)
 - Stream Deck or compatible device (e.g. AJAZZ AKP03)
 
 ## Installation
