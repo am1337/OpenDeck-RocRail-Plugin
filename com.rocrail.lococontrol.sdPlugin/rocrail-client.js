@@ -109,6 +109,13 @@ function mergeFnAttrsFromAttrMap(locoProps, attrs) {
  * Merge live `<lc/>` / `<fn/>` snippets from Rocrail broadcasts into the selected loco's props.
  * @returns {boolean} true if any `f0`…`f32` value changed for `locoId`
  */
+function idsMatchRocrailLc(aId, locoId) {
+  if (aId == null || locoId == null) return false;
+  const a = String(aId);
+  const b = String(locoId);
+  return a === b || a.toLowerCase() === b.toLowerCase();
+}
+
 export function mergeLcOrFnAttrsIntoLocoProps(locoProps, bodyXml, locoId) {
   if (!locoProps || !bodyXml || !locoId) return false;
   let any = false;
@@ -116,16 +123,111 @@ export function mergeLcOrFnAttrsIntoLocoProps(locoProps, bodyXml, locoId) {
   let m;
   while ((m = lcRe.exec(bodyXml)) !== null) {
     const a = parseAttrs(m[1]);
-    if (a.id !== locoId) continue;
+    if (!idsMatchRocrailLc(a.id, locoId)) continue;
     if (mergeFnAttrsFromAttrMap(locoProps, a)) any = true;
   }
   const fnRe = /<fn\s+([^>]+)\/?>/gi;
   while ((m = fnRe.exec(bodyXml)) !== null) {
     const a = parseAttrs(m[1]);
-    if (a.id !== locoId) continue;
+    if (!idsMatchRocrailLc(a.id, locoId)) continue;
     if (mergeFnAttrsFromAttrMap(locoProps, a)) any = true;
   }
   return any;
+}
+
+/** @typedef {Record<string, any> & { rawAttrs?: Record<string, string> }} LocoFnCacheSlice */
+
+/**
+ * Locate cached slice for locomotive id, matching keys case‑insensitively (Rocview id casing may vary).
+ *
+ * @param {Map<string, LocoFnCacheSlice>} cacheMap
+ */
+export function lookupLocoFnCacheSlice(cacheMap, locoId) {
+  if (!cacheMap || locoId == null) return undefined;
+  const s = String(locoId);
+  if (cacheMap.has(s)) return cacheMap.get(s);
+  for (const [key, slice] of cacheMap) {
+    if (idsMatchRocrailLc(key, s)) return slice;
+  }
+  return undefined;
+}
+
+/** @internal */
+function getOrCreateFnCacheSlot(cacheMap, rawIdFromXml) {
+  if (!cacheMap || rawIdFromXml == null) return null;
+  const s = String(rawIdFromXml);
+  for (const key of cacheMap.keys()) {
+    if (idsMatchRocrailLc(key, s)) return cacheMap.get(key);
+  }
+  const slot = {};
+  cacheMap.set(s, slot);
+  return slot;
+}
+
+/**
+ * Populate / merge locomotive decoder function keys from every `<lc/>` / `<fn/>` snippet (lclist, plan, unsolicited push, …). Sparse merge.
+ */
+export function ingestLcFnXmlIntoCaches(cacheMap, bodyXml) {
+  if (!cacheMap || !bodyXml || typeof bodyXml !== 'string') return;
+  const lcRe = /<lc\s+([^>]+)\/?>/gi;
+  let m;
+  while ((m = lcRe.exec(bodyXml)) !== null) {
+    const a = parseAttrs(m[1]);
+    if (!a?.id) continue;
+    const slot = getOrCreateFnCacheSlot(cacheMap, a.id);
+    if (!slot) continue;
+    mergeFnAttrsFromAttrMap(slot, a);
+  }
+  const fnRe = /<fn\s+([^>]+)\/?>/gi;
+  while ((m = fnRe.exec(bodyXml)) !== null) {
+    const a = parseAttrs(m[1]);
+    if (!a?.id) continue;
+    const slot = getOrCreateFnCacheSlot(cacheMap, a.id);
+    if (!slot) continue;
+    mergeFnAttrsFromAttrMap(slot, a);
+  }
+}
+
+/**
+ * Overlay cached `f*` keys that originated from Rocrail traffic onto lcprops-loaded state before drawing throttle OLED tiles.
+ *
+ * @param {LocoFnCacheSlice | undefined} cached
+ */
+export function overlayCachedLcFnOntoLocoProps(locoProps, cached) {
+  if (!locoProps || !cached || typeof cached !== 'object') return;
+  const ra = cached.rawAttrs && typeof cached.rawAttrs === 'object' ? cached.rawAttrs : null;
+  for (let i = 0; i <= 32; i++) {
+    const kl = `f${i}`;
+    if (!Object.prototype.hasOwnProperty.call(cached, kl)) continue;
+    locoProps[kl] = !!cached[kl];
+    if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
+    if (ra && Object.prototype.hasOwnProperty.call(ra, kl)) {
+      locoProps.rawAttrs[kl] = String(ra[kl]);
+    } else {
+      locoProps.rawAttrs[kl] = locoProps[kl] ? 'true' : 'false';
+    }
+  }
+}
+
+/**
+ * Write current `locoProps` booleans/strings back into cache (after local merges or lcprops+friends).
+ *
+ * @param {Map<string, LocoFnCacheSlice>} cacheMap
+ */
+export function syncLocoFnCacheFromLocoProps(cacheMap, locoProps) {
+  if (!cacheMap || !locoProps?.id) return;
+  const slot = getOrCreateFnCacheSlot(cacheMap, locoProps.id);
+  if (!slot || typeof slot !== 'object') return;
+  if (!slot.rawAttrs || typeof slot.rawAttrs !== 'object') slot.rawAttrs = {};
+  for (let i = 0; i <= 32; i++) {
+    const kl = `f${i}`;
+    slot[kl] = !!locoProps[kl];
+    if (locoProps.rawAttrs && typeof locoProps.rawAttrs === 'object' && kl in locoProps.rawAttrs) {
+      slot.rawAttrs[kl] = String(locoProps.rawAttrs[kl]);
+    } else {
+      slot.rawAttrs[kl] = locoProps[kl] ? 'true' : 'false';
+    }
+  }
 }
 
 function escapeXmlAttr(s) {
@@ -138,7 +240,7 @@ function escapeXmlAttr(s) {
 
 function parseLcList(xml) {
   const locos = [];
-  const lcRegex = /<lc\s+([^>]+)\/?>/g;
+  const lcRegex = /<lc\s+([^>]+)\/?>/gi;
   let m;
   while ((m = lcRegex.exec(xml)) !== null) {
     const attrs = parseAttrs(m[1]);
@@ -174,21 +276,21 @@ function sortLocosByName(locos) {
 function parseLcProps(xml, preferredId = null) {
   let lcAttrString = null;
   if (preferredId) {
-    const re = /<lc\s+([^>]+)\/?>/g;
+    const re = /<lc\s+([^>]+)\/?>/gi;
     let m;
     while ((m = re.exec(xml)) !== null) {
       const a = parseAttrs(m[1]);
-      if (a.id === preferredId) {
+      if (idsMatchRocrailLc(a.id, preferredId)) {
         lcAttrString = m[1];
         break;
       }
     }
   }
   if (!lcAttrString) {
-    const lcMatch = xml.match(/<lc\s+([^>]+)\/?>/);
+    const lcMatch = xml.match(/<lc\s+([^>]+)\/?>/i);
     if (!lcMatch) return null;
     const attrs0 = parseAttrs(lcMatch[1]);
-    if (preferredId && attrs0.id !== preferredId) return null;
+    if (preferredId && !idsMatchRocrailLc(attrs0.id, preferredId)) return null;
     lcAttrString = lcMatch[1];
   }
   const attrs = parseAttrs(lcAttrString);
@@ -341,6 +443,25 @@ function coalesceFnAttr(raw, snap, k, defaultVal = '') {
 }
 
 /**
+ * Prefer live `snap` values (direction / speed refreshed locally or from merges) over stale lcprops copy in `raw`.
+ * Rocrail applies `<fn/>` attributes verbatim; stale `dir`/`V` from lcprops wrongly reset throttle state.
+ */
+function snapFirstLcMotionAttr(raw, snap, k, defaultVal = '') {
+  if (snap && Object.prototype.hasOwnProperty.call(snap, k)) {
+    const v = snap[k];
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+    if (typeof v === 'string' && v.length) return String(v);
+  }
+  if (raw && Object.prototype.hasOwnProperty.call(raw, k)) {
+    const v = raw[k];
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    return String(v);
+  }
+  return defaultVal;
+}
+
+/**
  * Build an `<fn …/>` body matching Rocview: fixed attribute set/order, no `cmd`, `throttleid=""`.
  * @param {string} locoId
  * @param {number} fnIndex
@@ -383,6 +504,8 @@ function buildFnCommandXml(locoId, fnIndex, on, _throttleId, snapshot) {
       pushAttr(k, fnBoolAt(snap, raw, i, n, on) ? 'true' : 'false');
     } else if (k === 'throttleid') {
       pushAttr(k, '');
+    } else if (k === 'dir') {
+      pushAttr(k, snapFirstLcMotionAttr(raw, snap, k, 'false'));
     } else if (
       k === 'shift' ||
       k === 'longclick' ||
@@ -394,8 +517,7 @@ function buildFnCommandXml(locoId, fnIndex, on, _throttleId, snapshot) {
       k === 'standalone' ||
       k === 'fifotop' ||
       k === 'lookupschedule' ||
-      k === 'pause' ||
-      k === 'dir'
+      k === 'pause'
     ) {
       pushAttr(k, coalesceFnAttr(raw, snap, k, 'false'));
     } else if (k === 'active' || k === 'blockenterside') {
@@ -407,7 +529,7 @@ function buildFnCommandXml(locoId, fnIndex, on, _throttleId, snapshot) {
     } else if (k === 'scidx') {
       pushAttr(k, coalesceFnAttr(raw, snap, k, '-1'));
     } else if (k === 'V' || k === 'V_realkmh') {
-      pushAttr(k, coalesceFnAttr(raw, snap, k, '0'));
+      pushAttr(k, snapFirstLcMotionAttr(raw, snap, k, '0'));
     } else if (k === 'actor') {
       pushAttr(k, coalesceFnAttr(raw, snap, k, 'user'));
     } else if (k === 'fn') {
@@ -615,8 +737,25 @@ export class RocrailClient {
     return res.body;
   }
 
-  async getLocoList() {
+  async ingestPlanXmlIntoFnCaches(perLocoFnCacheMap = null) {
+    if (!perLocoFnCacheMap || !this.socket?.writable) return;
+    try {
+      const res = await this._send('model', '<model cmd="plan"/>', {
+        waitKind: 'plan',
+        matchBody: (b) => b.includes('<plan>') || b.includes('<lclist>'),
+      });
+      ingestLcFnXmlIntoCaches(perLocoFnCacheMap, res.body);
+    } catch (e) {
+      this.log(`plan→fn-cache ingest failed: ${e?.message || String(e)}`);
+    }
+  }
+
+  async getLocoList(perLocoFnCacheMap = null) {
     const body = await this.getLclistBody();
+    if (perLocoFnCacheMap) {
+      ingestLcFnXmlIntoCaches(perLocoFnCacheMap, body);
+      await this.ingestPlanXmlIntoFnCaches(perLocoFnCacheMap);
+    }
     let locos;
     if (body.includes('<plan>') || body.includes('<lclist>')) {
       locos = parsePlanLclist(body) || parseLcList(body);
@@ -627,10 +766,13 @@ export class RocrailClient {
   }
 
   /** `lcprops` may omit live `fN` flags; merge from latest `lclist` / plan `<lc/>` row for the same id. */
-  async syncLocoFnFromLclist(locoProps) {
+  async syncLocoFnFromLclist(locoProps, perLocoFnCacheMap = null) {
     if (!locoProps?.id || !this.socket?.writable) return;
     try {
       const body = await this.getLclistBody();
+      if (perLocoFnCacheMap) {
+        ingestLcFnXmlIntoCaches(perLocoFnCacheMap, body);
+      }
       mergeLcOrFnAttrsIntoLocoProps(locoProps, body, locoProps.id);
     } catch (e) {
       this.log(`syncLocoFnFromLclist failed: ${e?.message || String(e)}`);

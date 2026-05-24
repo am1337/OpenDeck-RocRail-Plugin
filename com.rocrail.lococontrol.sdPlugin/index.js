@@ -6,7 +6,15 @@
  */
 
 import WebSocket from 'ws';
-import { RocrailClient, mergeLcOrFnAttrsIntoLocoProps, rocrailFnIsActive } from './rocrail-client.js';
+import {
+  RocrailClient,
+  ingestLcFnXmlIntoCaches,
+  lookupLocoFnCacheSlice,
+  mergeLcOrFnAttrsIntoLocoProps,
+  overlayCachedLcFnOntoLocoProps,
+  rocrailFnIsActive,
+  syncLocoFnCacheFromLocoProps,
+} from './rocrail-client.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFile } from 'fs/promises';
@@ -15,6 +23,7 @@ import {
   getCachedCompositePng,
   getFnKeyOffBackgroundDataUri,
   getFnKeyOnBackgroundDataUri,
+  renderThrottleSpeedDirPng,
   sourceContentHash,
 } from './loco-composite.js';
 
@@ -28,6 +37,10 @@ const PLUGIN_DEBUG =
   process.env.ROCRAIL_PLUGIN_DEBUG === '1' || process.env.ROCRAIL_PLUGIN_DEBUG === 'true';
 
 const OLED_ACTION = `${PLUGIN_UUID}.oled`;
+
+const OLED_THROTTLE_VIEW_FN = 'function';
+const OLED_THROTTLE_VIEW_LOCO = 'loco';
+const OLED_THROTTLE_VIEW_SPEED = 'speed';
 
 /** Normalize host event names (OpenAction / bridges may use different casing or separators). */
 function normalizeOaEventName(event) {
@@ -138,6 +151,22 @@ function setLocoFnLocal(locoProps, fnKey, on) {
   lp.rawAttrs[fnKey] = on ? 'true' : 'false';
 }
 
+/** Keep `lc` direction / velocity on `snap` and `snap.rawAttrs` aligned for `<fn/>` payloads. */
+function syncLcThrottleIntoRawAttrs(locoProps) {
+  if (!locoProps || typeof locoProps !== 'object') return;
+  if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
+  const raw = locoProps.rawAttrs;
+  raw.dir = locoProps.dir === true ? 'true' : 'false';
+  const vPct = Math.max(0, Math.min(100, parseInt(String(locoProps.V ?? raw.V ?? '0'), 10) || 0));
+  locoProps.V = vPct;
+  raw.V = String(vPct);
+  if (locoProps.V_realkmh != null && `${locoProps.V_realkmh}`.trim() !== '') {
+    const rk = `${parseInt(String(locoProps.V_realkmh), 10) || 0}`;
+    locoProps.V_realkmh = rk;
+    raw.V_realkmh = rk;
+  }
+}
+
 class RocrailPlugin {
   constructor() {
     this.ws = null;
@@ -176,6 +205,12 @@ class RocrailPlugin {
     this._initRocrailChain = Promise.resolve();
     /** @type {ReturnType<typeof setTimeout> | null} */
     this._lcPushRefreshTimer = null;
+
+    /** OLED action-instance settings (keys: OLED context id from OpenDeck / Stream Deck PI). */
+    /** @type {Map<string, { throttleView?: string }>} */
+    this.oledSettingsByContext = new Map();
+    /** @type {Map<string, Record<string, any>>} per-loco `f*` booleans/rawAttrs stitched from lcprops, lclist, and `<lc>/<fn>` pushes */
+    this.perLocoFnCacheById = new Map();
   }
 
   log(msg, extra) {
@@ -191,6 +226,61 @@ class RocrailPlugin {
 
   _deviceId(device) {
     return device && String(device).length > 0 ? String(device) : 'default';
+  }
+
+  _effectiveOledTextFontPx() {
+    const n = parseInt(this.globalSettings?.oledTextFontSize, 10);
+    return Number.isFinite(n) ? Math.min(28, Math.max(8, n)) : null;
+  }
+
+  _normalizeThrottleViewSetting(v) {
+    const s = String(v ?? '').trim().toLowerCase();
+    if (s === OLED_THROTTLE_VIEW_LOCO) return OLED_THROTTLE_VIEW_LOCO;
+    if (s === OLED_THROTTLE_VIEW_SPEED) return OLED_THROTTLE_VIEW_SPEED;
+    return OLED_THROTTLE_VIEW_FN;
+  }
+
+  _mergeOledActionSettings(oledCtx, settings) {
+    if (oledCtx == null || settings == null || typeof settings !== 'object') return;
+    const prev = this.oledSettingsByContext.get(oledCtx) || {};
+    const merged = { ...prev };
+    if (Object.prototype.hasOwnProperty.call(settings, 'throttleView')) {
+      merged.throttleView = this._normalizeThrottleViewSetting(settings.throttleView);
+    }
+    this.oledSettingsByContext.set(oledCtx, merged);
+  }
+
+  _throttleViewForOledContext(oledCtx) {
+    const row = this.oledSettingsByContext.get(oledCtx);
+    const v = row?.throttleView;
+    return v != null ? this._normalizeThrottleViewSetting(v) : OLED_THROTTLE_VIEW_FN;
+  }
+
+  _countThrottleFunctionOledSlots(deviceId) {
+    const entries = this.getOledEntriesForDevice(deviceId);
+    let n = 0;
+    for (const [ctx] of entries) {
+      if (this._throttleViewForOledContext(ctx) === OLED_THROTTLE_VIEW_FN) n++;
+    }
+    return n;
+  }
+
+  _setTitleParametersMaybe(context, target = 0) {
+    const fs = this._effectiveOledTextFontPx();
+    if (fs == null) return;
+    this.send({
+      event: 'setTitleParameters',
+      context,
+      payload: {
+        payload: {
+          showTitle: true,
+          titleAlignment: 'middle',
+          fontUnderline: false,
+          fontSize: fs,
+        },
+        target,
+      },
+    });
   }
 
   getDeviceState(deviceId) {
@@ -391,6 +481,18 @@ class RocrailPlugin {
       return;
     }
 
+    if (evNorm === 'didreceivesettings') {
+      if (action === OLED_ACTION && context != null && payload != null && typeof payload === 'object') {
+        const rawInst =
+          payload.settings != null && typeof payload.settings === 'object' ? payload.settings : payload;
+        if (rawInst && typeof rawInst === 'object') {
+          this._mergeOledActionSettings(context, rawInst);
+          await this.refreshDevice(deviceId);
+        }
+      }
+      return;
+    }
+
     if (evNorm === 'setglobalsettings') return;
 
     if (!this._requestedGlobal) {
@@ -402,12 +504,21 @@ class RocrailPlugin {
     if (evNorm === 'willappear') {
       if (action === OLED_ACTION) {
         this.oledContexts.set(context, { row: coordinates.row, column: coordinates.column, device: deviceId });
+        if (payload?.settings != null && typeof payload.settings === 'object') {
+          this._mergeOledActionSettings(context, payload.settings);
+        }
       } else if (action === `${PLUGIN_UUID}.dirfwd`) {
         this.simpleContexts.set(context, { type: 'dirfwd', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.dirrev`) {
         this.simpleContexts.set(context, { type: 'dirrev', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.speed`) {
         this.dialContextByDevice.set(deviceId, context);
+      } else if (action === `${PLUGIN_UUID}.stoploco`) {
+        this.simpleContexts.set(context, { type: 'stoploco', device: deviceId });
+      } else if (action === `${PLUGIN_UUID}.speedplus`) {
+        this.simpleContexts.set(context, { type: 'speedplus', device: deviceId });
+      } else if (action === `${PLUGIN_UUID}.speedminus`) {
+        this.simpleContexts.set(context, { type: 'speedminus', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.scroll`) {
         this.scrollDialContextByDevice.set(deviceId, context);
       } else if (action === `${PLUGIN_UUID}.back`) {
@@ -425,7 +536,10 @@ class RocrailPlugin {
     if (evNorm === 'willdisappear') {
       if (action === OLED_ACTION) {
         this.oledContexts.delete(context);
+        this.oledSettingsByContext.delete(context);
       } else if (action === `${PLUGIN_UUID}.dirfwd` || action === `${PLUGIN_UUID}.dirrev`) {
+        this.simpleContexts.delete(context);
+      } else if (action === `${PLUGIN_UUID}.stoploco` || action === `${PLUGIN_UUID}.speedplus` || action === `${PLUGIN_UUID}.speedminus`) {
         this.simpleContexts.delete(context);
       } else if (action === `${PLUGIN_UUID}.speed`) {
         if (this.dialContextByDevice.get(deviceId) === context) this.dialContextByDevice.delete(deviceId);
@@ -452,6 +566,12 @@ class RocrailPlugin {
         await this.onDirection(false, deviceId);
       } else if (action === `${PLUGIN_UUID}.back`) {
         await this.onBack(deviceId);
+      } else if (action === `${PLUGIN_UUID}.stoploco`) {
+        await this.onSpeedStop(deviceId);
+      } else if (action === `${PLUGIN_UUID}.speedplus`) {
+        await this.onSpeedBumpPercent(5, deviceId);
+      } else if (action === `${PLUGIN_UUID}.speedminus`) {
+        await this.onSpeedBumpPercent(-5, deviceId);
       } else if (action === `${PLUGIN_UUID}.scrollup`) {
         await this.onScroll(1, deviceId);
       } else if (action === `${PLUGIN_UUID}.scrolldown`) {
@@ -482,10 +602,11 @@ class RocrailPlugin {
           if (action === `${PLUGIN_UUID}.speed`) {
             await this.onSpeedChange(ticks, deviceId);
           } else if (st.selectedLoco) {
+            const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
+            if (fnSlotsCount < 1) return;
             const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-            const oledCount = Math.max(1, this.getOledEntriesForDevice(deviceId).length);
             const step = this._getLocoListDialScrollStep(deviceId);
-            st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, oledCount);
+            st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, fnSlotsCount);
             await this.refreshOledsForDevice(deviceId);
             await this.refreshScrollForDevice(deviceId);
           }
@@ -616,11 +737,17 @@ class RocrailPlugin {
           st.locoProps = await this.rocrail.getLocoProps(loco.id);
           const nf = Array.isArray(st.locoProps?.fundefs) ? st.locoProps.fundefs.length : 0;
           this.log(`lcprops loco=${loco.id} fundefs=${nf} device=${deviceId}`);
-          if (st.locoProps?.id) await this.rocrail.syncLocoFnFromLclist(st.locoProps);
+          if (st.locoProps?.id) await this.rocrail.syncLocoFnFromLclist(st.locoProps, this.perLocoFnCacheById);
+          overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
+          syncLcThrottleIntoRawAttrs(st.locoProps);
+          syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
         } catch (e) {
           this.log(`lcprops failed loco=${loco.id}: ${e?.message || String(e)}`);
           st.locoProps = { ...loco, rawAttrs: { id: loco.id } };
           for (let i = 0; i <= 32; i++) st.locoProps[`f${i}`] = false;
+          overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
+          syncLcThrottleIntoRawAttrs(st.locoProps);
+          syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
         }
         st.fnScroll = 0;
         st.view = View.THROTTLE;
@@ -628,10 +755,38 @@ class RocrailPlugin {
         await this.refreshAllDevicesLocoListVisuals();
       }
     } else if (st.view === View.THROTTLE && st.selectedLoco && this.rocrail) {
+      const tv = context != null ? this._throttleViewForOledContext(context) : OLED_THROTTLE_VIEW_FN;
+
+      if (tv === OLED_THROTTLE_VIEW_SPEED) {
+        st.locoProps = st.locoProps || {};
+        const vPct = Math.max(0, parseInt(String(st.locoProps.V ?? 0), 10) || 0);
+        const rk = Math.max(0, parseInt(String(st.locoProps.V_realkmh ?? 0), 10) || 0);
+        const moving = vPct > 0 || rk > 0;
+        if (moving) await this.onSpeedStop(deviceId);
+        else await this.onDirection(!(st.locoProps.dir === true), deviceId);
+        return;
+      }
+
+      if (tv === OLED_THROTTLE_VIEW_LOCO) {
+        await this.onBack(deviceId);
+        return;
+      }
+
+      if (tv !== OLED_THROTTLE_VIEW_FN) return;
+
+      const entriesGrid = this.getOledEntriesForDevice(deviceId);
+      const fnSlotIdxs = [];
+      for (let gi = 0; gi < entriesGrid.length; gi++) {
+        const [c] = entriesGrid[gi];
+        if (this._throttleViewForOledContext(c) === OLED_THROTTLE_VIEW_FN) fnSlotIdxs.push(gi);
+      }
+      const fi = fnSlotIdxs.indexOf(idx);
+      if (fi < 0) return;
+
       const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-      const def = defs[st.fnScroll + idx];
+      const def = defs[st.fnScroll + fi];
       if (!def) {
-        this.log(`fn noop: no function at fnScroll=${st.fnScroll} idx=${idx} device=${deviceId}`);
+        this.log(`fn noop: no function at fnScroll=${st.fnScroll} slot=${fi} device=${deviceId}`);
         return;
       }
       const key = `f${def.fn}`;
@@ -651,11 +806,14 @@ class RocrailPlugin {
           this.log(`getLocoProps after fn failed loco=${st.selectedLoco.id}: ${e?.message || String(e)}`);
         }
         st.locoProps = st.locoProps || {};
+        syncLcThrottleIntoRawAttrs(st.locoProps);
         setLocoFnLocal(st.locoProps, key, next);
+        syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
         this.log(`fn ok loco=${st.selectedLoco.id} F${def.fn}=${next} device=${deviceId}`);
       } catch (e) {
         this.log(`setFunction failed loco=${st.selectedLoco.id} fn=${def.fn}: ${e?.message || String(e)}`);
         setLocoFnLocal(st.locoProps, key, cur);
+        syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
         await this.refreshOledsForDevice(deviceId);
         return;
       }
@@ -671,6 +829,7 @@ class RocrailPlugin {
     await this.rocrail.setDirection(st.selectedLoco.id, forward);
     st.locoProps = st.locoProps || {};
     st.locoProps.dir = forward;
+    syncLcThrottleIntoRawAttrs(st.locoProps);
     await this.refreshDevice(deviceId);
   }
 
@@ -682,7 +841,22 @@ class RocrailPlugin {
     const vPct = Math.max(0, Math.min(100, v));
     st.locoProps = st.locoProps || {};
     st.locoProps.V = vPct;
+    syncLcThrottleIntoRawAttrs(st.locoProps);
     this.log(`set speed loco=${st.selectedLoco.id} V=${vPct} device=${deviceId}`);
+    await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
+    await this.refreshOledsForDevice(deviceId);
+  }
+
+  async onSpeedBumpPercent(deltaPct, deviceId) {
+    await this.initRocrail(false);
+    const st = this.getDeviceState(deviceId);
+    if (!st.selectedLoco || !this.rocrail) return;
+    const v = (parseInt(st.locoProps?.V ?? 0, 10) || 0) + deltaPct;
+    const vPct = Math.max(0, Math.min(100, v));
+    st.locoProps = st.locoProps || {};
+    st.locoProps.V = vPct;
+    syncLcThrottleIntoRawAttrs(st.locoProps);
+    this.log(`adjust speed ±% loco=${st.selectedLoco.id} delta=${deltaPct} V=${vPct} device=${deviceId}`);
     await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
     await this.refreshOledsForDevice(deviceId);
   }
@@ -693,6 +867,7 @@ class RocrailPlugin {
     if (!st.selectedLoco || !this.rocrail) return;
     st.locoProps = st.locoProps || {};
     st.locoProps.V = 0;
+    syncLcThrottleIntoRawAttrs(st.locoProps);
     this.log(`stop loco=${st.selectedLoco.id} (V=0) device=${deviceId}`);
     await this.rocrail.stopLoco(st.selectedLoco.id);
     await this.refreshOledsForDevice(deviceId);
@@ -736,8 +911,11 @@ class RocrailPlugin {
     if (st.view === View.LOCO_LIST) {
       st.locoScroll = applyWrappedListScroll(st.locoScroll, delta, this.locos.length, oledCount);
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
-      const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-      st.fnScroll = applyWrappedListScroll(st.fnScroll, delta, defs.length, oledCount);
+      const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
+      if (fnSlotsCount >= 1) {
+        const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
+        st.fnScroll = applyWrappedListScroll(st.fnScroll, delta, defs.length, fnSlotsCount);
+      }
     }
     await this.refreshOledsForDevice(deviceId);
     await this.refreshScrollForDevice(deviceId);
@@ -752,8 +930,11 @@ class RocrailPlugin {
     if (st.view === View.LOCO_LIST) {
       st.locoScroll = applyWrappedListScroll(st.locoScroll, ticks * step, this.locos.length, oledCount);
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
-      const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-      st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, oledCount);
+      const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
+      if (fnSlotsCount >= 1) {
+        const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
+        st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, fnSlotsCount);
+      }
     }
     await this.refreshOledsForDevice(deviceId);
     await this.refreshScrollForDevice(deviceId);
@@ -772,15 +953,19 @@ class RocrailPlugin {
     }
   }
 
-  /** Rocrail TCP push (`<lc/>`, `<fn/>`, …): refresh throttle OLEDs when the selected loco's functions change. */
+  /** Rocrail TCP push (`<lc/>`, `<fn/>`, …): keep per‑loco function cache updated; throttle OLED refresh when driven loco changes. */
   _onRocrailPush(body, _name) {
-    let touched = false;
+    ingestLcFnXmlIntoCaches(this.perLocoFnCacheById, body);
+    let touchedThrottle = false;
     for (const deviceId of this._allDeviceIds()) {
       const st = this.getDeviceState(deviceId);
       if (st.view !== View.THROTTLE || !st.selectedLoco?.id || !st.locoProps) continue;
-      if (mergeLcOrFnAttrsIntoLocoProps(st.locoProps, body, st.selectedLoco.id)) touched = true;
+      if (mergeLcOrFnAttrsIntoLocoProps(st.locoProps, body, st.selectedLoco.id)) {
+        touchedThrottle = true;
+        syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
+      }
     }
-    if (!touched) return;
+    if (!touchedThrottle) return;
     if (this._lcPushRefreshTimer) clearTimeout(this._lcPushRefreshTimer);
     this._lcPushRefreshTimer = setTimeout(() => {
       this._lcPushRefreshTimer = null;
@@ -826,7 +1011,7 @@ class RocrailPlugin {
     }
     try {
       if (this.rocrail?.socket?.writable) {
-        this.locos = await this.rocrail.getLocoList();
+        this.locos = await this.rocrail.getLocoList(this.perLocoFnCacheById);
         this.log(`loaded locos count=${this.locos.length}`);
       } else {
         this.log('getLocoList skipped: Rocrail socket not connected yet');
@@ -838,7 +1023,7 @@ class RocrailPlugin {
     if (refreshAll) await this.refreshAllDevices();
   }
 
-  async _loadLocoImageDataUri(loco) {
+  async _loadLocoImageDataUri(loco, fontPx = null) {
     if (!loco?.id) return null;
 
     const displayText = formatLocoDisplayName(loco);
@@ -888,14 +1073,16 @@ class RocrailPlugin {
     }
 
     const srcHash = sourceContentHash(sourceBuffer);
-    const memKey = `${loco.id}|${displayText}|${srcHash}`;
+    const fsKey = fontPx != null && Number.isFinite(fontPx) ? String(Math.round(fontPx)) : 'auto';
+    const memKey = `${loco.id}|${displayText}|${srcHash}|${fsKey}`;
     if (this._locoImageCache.has(memKey)) {
       if (PLUGIN_DEBUG) this.log(`loco composite memory cache hit loco=${loco.id}`);
       return this._locoImageCache.get(memKey);
     }
 
     try {
-      const png = await getCachedCompositePng(COMPOSITE_CACHE_DIR, loco.id, displayText, sourceBuffer);
+      const fp = fontPx != null && Number.isFinite(fontPx) ? Math.round(fontPx) : null;
+      const png = await getCachedCompositePng(COMPOSITE_CACHE_DIR, loco.id, displayText, sourceBuffer, fp);
       const dataUri = `data:image/png;base64,${png.toString('base64')}`;
       this._locoImageCache.set(memKey, dataUri);
       if (PLUGIN_DEBUG) this.log(`loco composite ready loco=${loco.id} cacheDir=${COMPOSITE_CACHE_DIR}`);
@@ -925,6 +1112,7 @@ class RocrailPlugin {
     this._normalizeScrollPositionsForDevice(deviceId);
     const st = this.getDeviceState(deviceId);
     const entries = this.getOledEntriesForDevice(deviceId);
+    const compositeFontPx = this._effectiveOledTextFontPx();
 
     if (st.view === View.LOCO_LIST) {
       for (let i = 0; i < entries.length; i++) {
@@ -940,11 +1128,12 @@ class RocrailPlugin {
         if (this._isLocoLockedByOther(loco.id, deviceId)) {
           this.setImage(ctx, null);
           this.setTitle(ctx, `[busy] ${formatLocoDisplayName(loco)}`);
+          this._setTitleParametersMaybe(ctx);
           this.setState(ctx, 0);
           continue;
         }
 
-        const dataUri = await this._loadLocoImageDataUri(loco);
+        const dataUri = await this._loadLocoImageDataUri(loco, compositeFontPx);
         if (dataUri) {
           this.setImage(ctx, dataUri);
           this.setTitle(ctx, '');
@@ -952,14 +1141,84 @@ class RocrailPlugin {
         } else {
           this.setImage(ctx, null);
           this.setTitle(ctx, formatLocoDisplayName(loco));
+          this._setTitleParametersMaybe(ctx);
           this.setState(ctx, 0);
         }
       }
-    } else if (st.view === View.THROTTLE) {
+    } else if (st.view === View.THROTTLE && st.selectedLoco && st.locoProps) {
       const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
+      const fnSlotIdxs = [];
+      for (let gi = 0; gi < entries.length; gi++) {
+        const [c] = entries[gi];
+        if (this._throttleViewForOledContext(c) === OLED_THROTTLE_VIEW_FN) fnSlotIdxs.push(gi);
+      }
+
+      const locMerged = {
+        ...(st.selectedLoco || {}),
+        id: st.locoProps.id || st.selectedLoco?.id,
+        name: st.locoProps.name || st.selectedLoco?.name,
+        image:
+          (st.locoProps.rawAttrs && st.locoProps.rawAttrs.image) ||
+          st.locoProps.image ||
+          st.selectedLoco?.image ||
+          '',
+      };
+
+      const speedLbl = this.rocrail ? this.rocrail.formatSpeed(st.locoProps) : '---';
+
       for (let i = 0; i < entries.length; i++) {
         const [ctx] = entries[i];
-        const def = defs[st.fnScroll + i];
+        const tv = this._throttleViewForOledContext(ctx);
+
+        if (tv === OLED_THROTTLE_VIEW_LOCO) {
+          if (this._isLocoLockedByOther(locMerged.id, deviceId)) {
+            this.setImage(ctx, null);
+            this.setTitle(ctx, `[busy] ${formatLocoDisplayName(locMerged)}`);
+            this._setTitleParametersMaybe(ctx);
+            this.setState(ctx, 0);
+            continue;
+          }
+          const dataUri = await this._loadLocoImageDataUri(locMerged, compositeFontPx);
+          if (dataUri) {
+            this.setImage(ctx, dataUri);
+            this.setTitle(ctx, '');
+            this.setState(ctx, 0);
+          } else {
+            this.setImage(ctx, null);
+            this.setTitle(ctx, formatLocoDisplayName(locMerged));
+            this._setTitleParametersMaybe(ctx);
+            this.setState(ctx, 0);
+          }
+          continue;
+        }
+
+        if (tv === OLED_THROTTLE_VIEW_SPEED) {
+          try {
+            const png = await renderThrottleSpeedDirPng(
+              speedLbl,
+              st.locoProps.dir === true,
+              undefined,
+              compositeFontPx
+            );
+            const uri = `data:image/png;base64,${png.toString('base64')}`;
+            this.setImage(ctx, uri);
+          } catch (e) {
+            this.log(`throttle speed key render failed: ${e?.message || String(e)}`);
+            this.setImage(ctx, null);
+          }
+          this.setTitle(ctx, '');
+          this.setState(ctx, 0);
+          continue;
+        }
+
+        const fi = fnSlotIdxs.indexOf(i);
+        if (fi < 0) {
+          this.setImage(ctx, null);
+          this.setTitle(ctx, '');
+          this.setState(ctx, 0);
+          continue;
+        }
+        const def = defs[st.fnScroll + fi];
         if (!def) {
           this.setImage(ctx, null);
           this.setTitle(ctx, '');
@@ -971,6 +1230,7 @@ class RocrailPlugin {
         const uri = on ? await getFnKeyOnBackgroundDataUri() : await getFnKeyOffBackgroundDataUri();
         this.setImage(ctx, uri);
         this.setTitle(ctx, label);
+        this._setTitleParametersMaybe(ctx);
         this.setState(ctx, on ? 1 : 0);
       }
     }
@@ -984,6 +1244,9 @@ class RocrailPlugin {
       if (info.device !== d) continue;
       if (info.type === 'dirfwd') this.setTitle(ctx, show ? 'Fwd →' : '');
       if (info.type === 'dirrev') this.setTitle(ctx, show ? '← Rev' : '');
+      if (info.type === 'stoploco') this.setTitle(ctx, show ? 'Stop 0%' : '');
+      if (info.type === 'speedplus') this.setTitle(ctx, show ? '+5 %' : '');
+      if (info.type === 'speedminus') this.setTitle(ctx, show ? '-5 %' : '');
     }
   }
 
@@ -1015,10 +1278,14 @@ class RocrailPlugin {
       if (!listCanScroll(len, oledCount)) st.locoScroll = 0;
       else st.locoScroll = Math.min(st.locoScroll, listMaxScrollStart(len, oledCount));
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
-      const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-      const len = defs.length;
-      if (!listCanScroll(len, oledCount)) st.fnScroll = 0;
-      else st.fnScroll = Math.min(st.fnScroll, listMaxScrollStart(len, oledCount));
+      const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
+      if (fnSlotsCount < 1) st.fnScroll = 0;
+      else {
+        const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
+        const len = defs.length;
+        if (!listCanScroll(len, fnSlotsCount)) st.fnScroll = 0;
+        else st.fnScroll = Math.min(st.fnScroll, listMaxScrollStart(len, fnSlotsCount));
+      }
     }
   }
 
@@ -1033,8 +1300,9 @@ class RocrailPlugin {
       hasUp = can;
       hasDown = can;
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
+      const fnSlotsCount = this._countThrottleFunctionOledSlots(d);
       const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-      const can = listCanScroll(defs.length, oledCount);
+      const can = fnSlotsCount >= 1 && listCanScroll(defs.length, fnSlotsCount);
       hasUp = can;
       hasDown = can;
     }

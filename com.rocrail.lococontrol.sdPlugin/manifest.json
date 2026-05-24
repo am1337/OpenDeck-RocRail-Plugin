@@ -86,6 +86,42 @@
       ]
     },
     {
+      "Name": "Rocrail Stop loco",
+      "UUID": "com.rocrail.lococontrol.stoploco",
+      "Tooltip": "Sets the current locomotive speed to zero (RCP velocity 0%). Requires a locomotive selected (throttle mode).",
+      "Icon": "actions/stop",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/stop"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Speed +5%",
+      "UUID": "com.rocrail.lococontrol.speedplus",
+      "Tooltip": "Increases the current locomotive speed by five percentage steps (RCP velocity). Requires a locomotive selected.",
+      "Icon": "actions/speedplus",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/speedplus"
+        }
+      ]
+    },
+    {
+      "Name": "Rocrail Speed −5%",
+      "UUID": "com.rocrail.lococontrol.speedminus",
+      "Tooltip": "Decreases the current locomotive speed by five percentage steps (RCP velocity). Requires a locomotive selected.",
+      "Icon": "actions/speedminus",
+      "Controllers": ["Keypad"],
+      "States": [
+        {
+          "Image": "actions/speedminus"
+        }
+      ]
+    },
+    {
       "Name": "Rocrail List Scroll Dial",
       "UUID": "com.rocrail.lococontrol.scroll",
       "Tooltip": "Encoder: scroll loco list (wrap) or function list in throttle; same step mode as global setting for OLED/speed dial",

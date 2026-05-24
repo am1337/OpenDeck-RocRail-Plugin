@@ -1,8 +1,8 @@
 /**
  * Build square OLED images: top half = loco name on a fill taken from the source image's top-left
- * pixel (black if missing image or that pixel is transparent); bottom half = photo (fit height, crop right if wide).
+ * pixel (black if missing image or that pixel is transparent); bottom half = photo (fit height, crop left if wide).
  * Side padding when the photo is narrower than the strip uses the same RGB as the text bar; the photo is centered horizontally.
- * PNGs are cached on disk; cache key changes when loco id, label, or source image bytes change.
+ * PNGs are cached on disk; cache key changes when loco id, label, font size, or source image bytes change.
  */
 
 import sharp from 'sharp';
@@ -12,7 +12,7 @@ import { join } from 'path';
 
 export const OLED_COMPOSITE_SIZE = 144;
 
-const CACHE_FORMAT_VERSION = 6;
+const CACHE_FORMAT_VERSION = 7;
 
 export function formatLocoDisplayName(loco) {
   const raw = (loco?.name || loco?.id || '?').toString();
@@ -33,10 +33,11 @@ export function sourceContentHash(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
-export function compositeCacheFileKey(locoId, displayText, sourceHash) {
+export function compositeCacheFileKey(locoId, displayText, sourceHash, fontSizePx = null) {
+  const fs = fontSizePx == null || !Number.isFinite(fontSizePx) ? 'auto' : String(Math.round(fontSizePx));
   return crypto
     .createHash('sha256')
-    .update(`${CACHE_FORMAT_VERSION}|${locoId}|${displayText}|${sourceHash}`)
+    .update(`${CACHE_FORMAT_VERSION}|${locoId}|${displayText}|${sourceHash}|${fs}`)
     .digest('hex')
     .slice(0, 32);
 }
@@ -100,8 +101,12 @@ async function getTopLeftBackgroundRgb(sourceBuffer) {
   }
 }
 
-async function renderTopHalfPng(displayText, size, half, bgRgb) {
-  const fontSize = Math.min(24, Math.max(12, Math.floor(half * 0.32)));
+async function renderTopHalfPng(displayText, size, half, bgRgb, fontSizePx = null) {
+  const auto = Math.min(24, Math.max(12, Math.floor(half * 0.32)));
+  const fontSize =
+    fontSizePx != null && Number.isFinite(fontSizePx)
+      ? Math.min(28, Math.max(8, Math.round(fontSizePx)))
+      : auto;
   const { r, g, b } = bgRgb;
   const textFill = textColorForBackground(r, g, b);
   const svg = Buffer.from(
@@ -133,7 +138,8 @@ async function renderBottomHalfPng(sourceBuffer, size, half, padRgb) {
   const h = info.height;
 
   if (w > size) {
-    return sharp(data).extract({ left: 0, top: 0, width: size, height: h }).png().toBuffer();
+    const left = Math.max(0, w - size);
+    return sharp(data).extract({ left, top: 0, width: size, height: h }).png().toBuffer();
   }
   if (w < size) {
     const left = Math.floor((size - w) / 2);
@@ -147,12 +153,48 @@ async function renderBottomHalfPng(sourceBuffer, size, half, padRgb) {
   return sharp(data).png().toBuffer();
 }
 
-export async function renderLocoCompositePng(sourceBuffer, displayText, size = OLED_COMPOSITE_SIZE) {
+/**
+ * Throttle OLED: speed (top) + direction (bottom), same split as loco list tiles.
+ * @param {string} speedText
+ * @param {boolean} dirForward
+ */
+export async function renderThrottleSpeedDirPng(
+  speedText,
+  dirForward,
+  size = OLED_COMPOSITE_SIZE,
+  fontSizePx = null
+) {
+  const half = size / 2;
+  /** Speed/direction OLED: solid black backing and light typography. */
+  const bgRgb = { r: 0, g: 0, b: 0 };
+  const dirLine = dirForward ? '\u2192 Fwd' : '\u2190 Rev';
+  const fsTop =
+    fontSizePx != null && Number.isFinite(fontSizePx)
+      ? Math.min(26, Math.max(8, Math.round(fontSizePx)))
+      : Math.min(22, Math.max(11, Math.floor(half * 0.28)));
+  const fsBot = Math.min(34, Math.max(10, Math.floor(fsTop * 1.35)));
+  const fg = '#e8e8e8';
+  const svg = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
+      <text x="50%" y="${half * 0.5}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(String(speedText ?? ''))}</text>
+      <text x="50%" y="${half + half * 0.52}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsBot}" font-weight="600" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(dirLine)}</text>
+    </svg>`
+  );
+  return sharp(svg).png().toBuffer();
+}
+
+export async function renderLocoCompositePng(
+  sourceBuffer,
+  displayText,
+  size = OLED_COMPOSITE_SIZE,
+  fontSizePx = null
+) {
   const half = size / 2;
   const bgRgb = await getTopLeftBackgroundRgb(sourceBuffer);
   const [bottomPng, topPng] = await Promise.all([
     renderBottomHalfPng(sourceBuffer, size, half, bgRgb),
-    renderTopHalfPng(displayText, size, half, bgRgb),
+    renderTopHalfPng(displayText, size, half, bgRgb, fontSizePx),
   ]);
 
   return sharp({
@@ -213,16 +255,16 @@ export async function getFnKeyOffBackgroundDataUri() {
 /**
  * Returns PNG buffer, using disk cache when the key matches.
  */
-export async function getCachedCompositePng(cacheDir, locoId, displayText, sourceBuffer) {
+export async function getCachedCompositePng(cacheDir, locoId, displayText, sourceBuffer, fontSizePx = null) {
   await mkdir(cacheDir, { recursive: true });
   const srcHash = sourceContentHash(sourceBuffer);
-  const key = compositeCacheFileKey(locoId, displayText, srcHash);
+  const key = compositeCacheFileKey(locoId, displayText, srcHash, fontSizePx);
   const filePath = join(cacheDir, `${key}.png`);
 
   try {
     return await readFile(filePath);
   } catch {
-    const png = await renderLocoCompositePng(sourceBuffer, displayText);
+    const png = await renderLocoCompositePng(sourceBuffer, displayText, OLED_COMPOSITE_SIZE, fontSizePx);
     await writeFile(filePath, png);
     return png;
   }
