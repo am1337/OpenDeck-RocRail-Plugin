@@ -143,6 +143,45 @@ function applyWrappedListScroll(current, delta, listLen, pageSize) {
   return ((v % n) + n) % n;
 }
 
+/** First index of each scrolled "page": 0, visibleSlots, …, ending at listMaxScrollStart (short final page when len is not a multiple). */
+function listPageScrollAnchors(listLen, visibleSlots) {
+  const vs = Math.max(1, visibleSlots);
+  if (listLen <= 0) return [0];
+  const maxStart = listMaxScrollStart(listLen, vs);
+  if (!listCanScroll(listLen, vs)) return [0];
+  const anchors = [];
+  let s = 0;
+  for (;;) {
+    anchors.push(s);
+    if (s >= maxStart) break;
+    s = Math.min(s + vs, maxStart);
+  }
+  return anchors;
+}
+
+/** Largest anchor index whose start offset ≤ scrollPos */
+function anchorIndexAtOrBelow(anchors, scrollPos) {
+  let i = anchors.length - 1;
+  while (i > 0 && anchors[i] > scrollPos) i--;
+  return i;
+}
+
+/**
+ * "One page per dial step": advance by whole page boundaries (fixes unreachable last partial page vs raw index+delta modulo).
+ * @param {number} pageTurnTicks Encoder delta (positive/negative), one tick → next/prev anchor.
+ */
+function advanceListScrollByPageTicks(currentScroll, pageTurnTicks, listLen, visibleSlots) {
+  const vs = Math.max(1, visibleSlots);
+  const anchors = listPageScrollAnchors(listLen, vs);
+  const nAnch = anchors.length;
+  if (nAnch <= 1 || pageTurnTicks === 0) return Math.min(Math.max(0, currentScroll), Math.max(0, listLen - vs));
+  const maxStart = listMaxScrollStart(listLen, vs);
+  const clamped = Math.min(Math.max(0, currentScroll), maxStart);
+  let idx = anchorIndexAtOrBelow(anchors, clamped);
+  idx = ((idx + pageTurnTicks) % nAnch + nAnch) % nAnch;
+  return anchors[idx];
+}
+
 /** Sync `fN` boolean and `rawAttrs.fN` string for Rocrail `<fn/>` replays and UI reads. */
 function setLocoFnLocal(locoProps, fnKey, on) {
   const lp = locoProps || {};
@@ -593,9 +632,12 @@ class RocrailPlugin {
       } else if (action === OLED_ACTION || action === `${PLUGIN_UUID}.speed`) {
         const st = this.getDeviceState(deviceId);
         if (st.view === View.LOCO_LIST) {
-          const step = this._getLocoListDialScrollStep(deviceId);
           const oledCount = Math.max(1, this.getOledEntriesForDevice(deviceId).length);
-          st.locoScroll = applyWrappedListScroll(st.locoScroll, ticks * step, this.locos.length, oledCount);
+          if (this._isLocoListDialPageMode()) {
+            st.locoScroll = advanceListScrollByPageTicks(st.locoScroll, ticks, this.locos.length, oledCount);
+          } else {
+            st.locoScroll = applyWrappedListScroll(st.locoScroll, ticks, this.locos.length, oledCount);
+          }
           await this.refreshOledsForDevice(deviceId);
           await this.refreshScrollForDevice(deviceId);
         } else if (st.view === View.THROTTLE) {
@@ -605,8 +647,11 @@ class RocrailPlugin {
             const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
             if (fnSlotsCount < 1) return;
             const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-            const step = this._getLocoListDialScrollStep(deviceId);
-            st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, fnSlotsCount);
+            if (this._isLocoListDialPageMode()) {
+              st.fnScroll = advanceListScrollByPageTicks(st.fnScroll, ticks, defs.length, fnSlotsCount);
+            } else {
+              st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks, defs.length, fnSlotsCount);
+            }
             await this.refreshOledsForDevice(deviceId);
             await this.refreshScrollForDevice(deviceId);
           }
@@ -896,13 +941,9 @@ class RocrailPlugin {
     await this.refreshAllDevicesLocoListVisuals();
   }
 
-  _getLocoListDialScrollStep(deviceId) {
-    const mode = this.globalSettings.locoListDialScroll || 'single';
-    if (mode === 'page') {
-      const n = this.getOledEntriesForDevice(deviceId).length;
-      return Math.max(1, n);
-    }
-    return 1;
+  /** Global property: OLED / scroll encoder rotates one visible page at a time (short final page included). */
+  _isLocoListDialPageMode() {
+    return (this.globalSettings.locoListDialScroll || 'single') === 'page';
   }
 
   async onScroll(delta, deviceId) {
@@ -925,15 +966,22 @@ class RocrailPlugin {
   async onScrollDialRotate(ticks, deviceId) {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
-    const step = this._getLocoListDialScrollStep(deviceId);
     const oledCount = Math.max(1, this.getOledEntriesForDevice(deviceId).length);
     if (st.view === View.LOCO_LIST) {
-      st.locoScroll = applyWrappedListScroll(st.locoScroll, ticks * step, this.locos.length, oledCount);
+      if (this._isLocoListDialPageMode()) {
+        st.locoScroll = advanceListScrollByPageTicks(st.locoScroll, ticks, this.locos.length, oledCount);
+      } else {
+        st.locoScroll = applyWrappedListScroll(st.locoScroll, ticks, this.locos.length, oledCount);
+      }
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
       const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
       if (fnSlotsCount >= 1) {
         const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
-        st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks * step, defs.length, fnSlotsCount);
+        if (this._isLocoListDialPageMode()) {
+          st.fnScroll = advanceListScrollByPageTicks(st.fnScroll, ticks, defs.length, fnSlotsCount);
+        } else {
+          st.fnScroll = applyWrappedListScroll(st.fnScroll, ticks, defs.length, fnSlotsCount);
+        }
       }
     }
     await this.refreshOledsForDevice(deviceId);

@@ -59,7 +59,7 @@ Open the Property Inspector on **any** placed Rocrail action to reach the shared
 
 Each OLED tile shows either a **loco composite** (narrow/wide artwork is **cropped on the left** so the locomotive stays right‑aligned) or name‑only fallback. Busy locos locked on another desk show `[busy]` as text.
 
-Encoder, OLED dial rotate, or dedicated scroll hardware moves through the roster (wrap). Default scroll advances **by one page** per step count of OLEDs.
+Encoder, OLED dial rotate, or dedicated scroll hardware moves through the roster (wrap). Default scroll advances **by one page** per step count of OLEDs, including the **final partial page** (extra tiles stay blank). Simple **scroll up/down** buttons still move **one loco row** at a time regardless of encoder page mode.
 
 ### Throttle mode (after selecting a loco)
 
