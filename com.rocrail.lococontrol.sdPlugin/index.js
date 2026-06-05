@@ -17,10 +17,11 @@ import {
 } from './rocrail-client.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFile } from 'fs/promises';
 import {
+  MAX_OLED_TEXT_FONT_PX,
   formatLocoDisplayName,
   getCachedCompositePng,
+  getCachedFunctionIconPng,
   getFnKeyOffBackgroundDataUri,
   getFnKeyOnBackgroundDataUri,
   renderThrottleSpeedDirPng,
@@ -41,6 +42,24 @@ const OLED_ACTION = `${PLUGIN_UUID}.oled`;
 const OLED_THROTTLE_VIEW_FN = 'function';
 const OLED_THROTTLE_VIEW_LOCO = 'loco';
 const OLED_THROTTLE_VIEW_SPEED = 'speed';
+const OLED_THROTTLE_VIEW_SPEED_ONLY = 'speedonly';
+const OLED_THROTTLE_VIEW_DIR_ONLY = 'directiononly';
+
+/** True for any of the speed/direction display tiles (speed & direction, speed only, direction only). */
+function isSpeedFamilyThrottleView(tv) {
+  return (
+    tv === OLED_THROTTLE_VIEW_SPEED ||
+    tv === OLED_THROTTLE_VIEW_SPEED_ONLY ||
+    tv === OLED_THROTTLE_VIEW_DIR_ONLY
+  );
+}
+
+/** Render mode for renderThrottleSpeedDirPng based on the configured throttle view. */
+function speedTileRenderMode(tv) {
+  if (tv === OLED_THROTTLE_VIEW_SPEED_ONLY) return 'speed';
+  if (tv === OLED_THROTTLE_VIEW_DIR_ONLY) return 'direction';
+  return 'both';
+}
 
 /** Normalize host event names (OpenAction / bridges may use different casing or separators). */
 function normalizeOaEventName(event) {
@@ -239,6 +258,10 @@ class RocrailPlugin {
 
     /** @type {Map<string, string|null>} key: locoId|displayText|sourceHash -> dataUri */
     this._locoImageCache = new Map();
+    /** @type {Map<string, Buffer|null>} fetched function icon source bytes keyed by URL (icons are static) */
+    this._fnIconSourceByUrl = new Map();
+    /** @type {Map<string, string|null>} key: iconName|on|sourceHash -> dataUri */
+    this._fnIconCache = new Map();
 
     /** Serialize initRocrail / getLocoList so parallel willAppear from multiple decks cannot mix TCP replies. */
     this._initRocrailChain = Promise.resolve();
@@ -269,13 +292,15 @@ class RocrailPlugin {
 
   _effectiveOledTextFontPx() {
     const n = parseInt(this.globalSettings?.oledTextFontSize, 10);
-    return Number.isFinite(n) ? Math.min(28, Math.max(8, n)) : null;
+    return Number.isFinite(n) ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, n)) : null;
   }
 
   _normalizeThrottleViewSetting(v) {
     const s = String(v ?? '').trim().toLowerCase();
     if (s === OLED_THROTTLE_VIEW_LOCO) return OLED_THROTTLE_VIEW_LOCO;
     if (s === OLED_THROTTLE_VIEW_SPEED) return OLED_THROTTLE_VIEW_SPEED;
+    if (s === OLED_THROTTLE_VIEW_SPEED_ONLY) return OLED_THROTTLE_VIEW_SPEED_ONLY;
+    if (s === OLED_THROTTLE_VIEW_DIR_ONLY) return OLED_THROTTLE_VIEW_DIR_ONLY;
     return OLED_THROTTLE_VIEW_FN;
   }
 
@@ -516,6 +541,8 @@ class RocrailPlugin {
       if (PLUGIN_DEBUG) this.log('global settings updated', this.globalSettings);
       else this.log('global settings updated');
       this._locoImageCache.clear();
+      this._fnIconSourceByUrl.clear();
+      this._fnIconCache.clear();
       await this.initRocrail();
       return;
     }
@@ -802,13 +829,20 @@ class RocrailPlugin {
     } else if (st.view === View.THROTTLE && st.selectedLoco && this.rocrail) {
       const tv = context != null ? this._throttleViewForOledContext(context) : OLED_THROTTLE_VIEW_FN;
 
-      if (tv === OLED_THROTTLE_VIEW_SPEED) {
+      if (isSpeedFamilyThrottleView(tv)) {
         st.locoProps = st.locoProps || {};
         const vPct = Math.max(0, parseInt(String(st.locoProps.V ?? 0), 10) || 0);
         const rk = Math.max(0, parseInt(String(st.locoProps.V_realkmh ?? 0), 10) || 0);
         const moving = vPct > 0 || rk > 0;
-        if (moving) await this.onSpeedStop(deviceId);
-        else await this.onDirection(!(st.locoProps.dir === true), deviceId);
+        if (tv === OLED_THROTTLE_VIEW_DIR_ONLY) {
+          await this.onDirection(!(st.locoProps.dir === true), deviceId);
+        } else if (tv === OLED_THROTTLE_VIEW_SPEED_ONLY) {
+          if (moving) await this.onSpeedStop(deviceId);
+        } else if (moving) {
+          await this.onSpeedStop(deviceId);
+        } else {
+          await this.onDirection(!(st.locoProps.dir === true), deviceId);
+        }
         return;
       }
 
@@ -946,6 +980,25 @@ class RocrailPlugin {
     return (this.globalSettings.locoListDialScroll || 'single') === 'page';
   }
 
+  /**
+   * Apply the global "Displayed locos" filter: hide locos running in automatic
+   * (`mode_auto="auto"`) and optionally half‑automatic (`mode_halfauto="halfauto"`) mode.
+   */
+  _filterDisplayedLocos(locos) {
+    if (!Array.isArray(locos)) return [];
+    const mode = this.globalSettings.displayedLocos || 'all';
+    if (mode === 'all') return locos;
+    return locos.filter((l) => {
+      const isAuto = String(l?.mode_auto ?? '').trim().toLowerCase() === 'auto';
+      if (isAuto) return false;
+      if (mode === 'noautohalf') {
+        const isHalfAuto = String(l?.mode_halfauto ?? '').trim().toLowerCase() === 'halfauto';
+        if (isHalfAuto) return false;
+      }
+      return true;
+    });
+  }
+
   async onScroll(delta, deviceId) {
     const st = this.getDeviceState(deviceId);
     const oledCount = Math.max(1, this.getOledEntriesForDevice(deviceId).length);
@@ -1059,8 +1112,9 @@ class RocrailPlugin {
     }
     try {
       if (this.rocrail?.socket?.writable) {
-        this.locos = await this.rocrail.getLocoList(this.perLocoFnCacheById);
-        this.log(`loaded locos count=${this.locos.length}`);
+        const allLocos = await this.rocrail.getLocoList(this.perLocoFnCacheById);
+        this.locos = this._filterDisplayedLocos(allLocos);
+        this.log(`loaded locos count=${this.locos.length} (of ${allLocos.length}) filter=${this.globalSettings.displayedLocos || 'all'}`);
       } else {
         this.log('getLocoList skipped: Rocrail socket not connected yet');
       }
@@ -1071,6 +1125,74 @@ class RocrailPlugin {
     if (refreshAll) await this.refreshAllDevices();
   }
 
+  /**
+   * Build an HTTP URL for a Rocrail file served by the image / web service.
+   * @param {string} fileName
+   * @param {string} basePathSetting Configured base path (`httpBasePath` for images, icon base path for icons).
+   */
+  _buildHttpFileUrl(fileName, basePathSetting) {
+    const name = (fileName || '').trim();
+    if (!name) return null;
+    const host = this.globalSettings.host || '127.0.0.1';
+    const httpPort = parseInt(this.globalSettings.httpPort || '8080', 10);
+    let basePath = (basePathSetting ?? '/').trim() || '/';
+    if (!basePath.startsWith('/')) basePath = `/${basePath}`;
+    if (basePath !== '/' && !basePath.endsWith('/')) basePath += '/';
+    const pathPrefix = basePath === '/' ? '' : basePath.replace(/\/$/, '');
+    const urlPath = pathPrefix
+      ? `${pathPrefix}/${encodeURIComponent(name)}`
+      : `/${encodeURIComponent(name)}`;
+    return `http://${host}:${httpPort}${urlPath}`;
+  }
+
+  /** Function-icon base path: dedicated `httpIconBasePath` when set, otherwise the shared image base path. */
+  _iconBasePathSetting() {
+    const v = (this.globalSettings.httpIconBasePath ?? '').trim();
+    return v !== '' ? v : (this.globalSettings.httpBasePath ?? '/');
+  }
+
+  /** Fetch + render a Rocrail function icon onto an OLED tile; cached in memory and on disk like loco images. */
+  async _loadFunctionIconDataUri(iconName, on) {
+    const name = (iconName || '').trim();
+    if (!name) return null;
+    const url = this._buildHttpFileUrl(name, this._iconBasePathSetting());
+    if (!url) return null;
+
+    let sourceBuffer = this._fnIconSourceByUrl.get(url);
+    if (sourceBuffer === undefined) {
+      sourceBuffer = null;
+      try {
+        if (PLUGIN_DEBUG) this.log(`loading function icon via http icon=${name} url=${url}`);
+        const res = await fetch(url, { redirect: 'follow' });
+        if (res.ok) {
+          sourceBuffer = Buffer.from(await res.arrayBuffer());
+          if (PLUGIN_DEBUG) this.log(`http icon fetched icon=${name} bytes=${sourceBuffer.length}`);
+        } else {
+          this.log(`http icon fetch failed status=${res.status} icon=${name}`);
+        }
+      } catch (e) {
+        this.log(`http icon fetch error icon=${name}: ${e?.message || String(e)}`);
+      }
+      this._fnIconSourceByUrl.set(url, sourceBuffer);
+    }
+    if (!sourceBuffer) return null;
+
+    const srcHash = sourceContentHash(sourceBuffer);
+    const memKey = `${name}|${on ? 1 : 0}|${srcHash}`;
+    if (this._fnIconCache.has(memKey)) return this._fnIconCache.get(memKey);
+
+    try {
+      const png = await getCachedFunctionIconPng(COMPOSITE_CACHE_DIR, name, on, sourceBuffer);
+      const dataUri = `data:image/png;base64,${png.toString('base64')}`;
+      this._fnIconCache.set(memKey, dataUri);
+      return dataUri;
+    } catch (e) {
+      this.log(`function icon render failed icon=${name}: ${e?.message || String(e)}`);
+      this._fnIconCache.set(memKey, null);
+      return null;
+    }
+  }
+
   async _loadLocoImageDataUri(loco, fontPx = null) {
     if (!loco?.id) return null;
 
@@ -1079,17 +1201,7 @@ class RocrailPlugin {
 
     const imageName = (loco.image || '').trim();
     if (imageName) {
-      const host = this.globalSettings.host || '127.0.0.1';
-      const httpPort = parseInt(this.globalSettings.httpPort || '8080', 10);
-      let basePath = (this.globalSettings.httpBasePath ?? '/').trim() || '/';
-      if (!basePath.startsWith('/')) basePath = `/${basePath}`;
-      if (basePath !== '/' && !basePath.endsWith('/')) basePath += '/';
-      const pathPrefix = basePath === '/' ? '' : basePath.replace(/\/$/, '');
-      const urlPath = pathPrefix
-        ? `${pathPrefix}/${encodeURIComponent(imageName)}`
-        : `/${encodeURIComponent(imageName)}`;
-      const url = `http://${host}:${httpPort}${urlPath}`;
-
+      const url = this._buildHttpFileUrl(imageName, this.globalSettings.httpBasePath ?? '/');
       try {
         if (PLUGIN_DEBUG) this.log(`loading loco image via http loco=${loco.id} url=${url}`);
         const res = await fetch(url, { redirect: 'follow' });
@@ -1101,20 +1213,6 @@ class RocrailPlugin {
         }
       } catch (e) {
         this.log(`http image fetch error loco=${loco.id}: ${e?.message || String(e)}`);
-      }
-
-      if (!sourceBuffer) {
-        const localDir = (this.globalSettings.localImageDir || '').trim();
-        if (localDir) {
-          try {
-            const fullPath = join(localDir, imageName);
-            if (PLUGIN_DEBUG) this.log(`loading loco image via disk loco=${loco.id} path=${fullPath}`);
-            sourceBuffer = await readFile(fullPath);
-            if (PLUGIN_DEBUG) this.log(`disk image loaded loco=${loco.id} bytes=${sourceBuffer.length}`);
-          } catch (e) {
-            this.log(`disk image load failed loco=${loco.id}: ${e?.message || String(e)}`);
-          }
-        }
       }
     } else {
       if (PLUGIN_DEBUG) this.log(`no loco image file loco=${loco.id}, composite text-only`);
@@ -1240,13 +1338,14 @@ class RocrailPlugin {
           continue;
         }
 
-        if (tv === OLED_THROTTLE_VIEW_SPEED) {
+        if (isSpeedFamilyThrottleView(tv)) {
           try {
             const png = await renderThrottleSpeedDirPng(
               speedLbl,
               st.locoProps.dir === true,
               undefined,
-              compositeFontPx
+              compositeFontPx,
+              speedTileRenderMode(tv)
             );
             const uri = `data:image/png;base64,${png.toString('base64')}`;
             this.setImage(ctx, uri);
@@ -1274,6 +1373,13 @@ class RocrailPlugin {
           continue;
         }
         const on = rocrailFnIsActive(st.locoProps, def.fn);
+        const iconUri = def.icon ? await this._loadFunctionIconDataUri(def.icon, on) : null;
+        if (iconUri) {
+          this.setImage(ctx, iconUri);
+          this.setTitle(ctx, '');
+          this.setState(ctx, on ? 1 : 0);
+          continue;
+        }
         const label = wrapFnLabel(def.text || `F${def.fn}`, 9, 4);
         const uri = on ? await getFnKeyOnBackgroundDataUri() : await getFnKeyOffBackgroundDataUri();
         this.setImage(ctx, uri);

@@ -24,7 +24,13 @@
   <div class="section">
     <h3 style="margin: 0 0 8px 0;">Loco list &amp; scroll (global)</h3>
     <label>OLED composite / labelled text font size (px)</label>
-    <input type="number" id="oledTextFontSize" min="8" max="28" placeholder="empty = automatic">
+    <input type="number" id="oledTextFontSize" min="8" max="48" placeholder="empty = automatic">
+    <label>Displayed locos</label>
+    <select id="displayedLocos">
+      <option value="all">All locos</option>
+      <option value="noauto">No locos in auto mode</option>
+      <option value="noautohalf">No locos in auto or half-auto mode</option>
+    </select>
     <label>Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder</label>
     <select id="locoListDialScroll">
       <option value="page">One page per step (same count as visible OLED buttons)</option>
@@ -39,17 +45,19 @@
       <option value="function">Functions (unchanged legacy behaviour)</option>
       <option value="loco">Loco portrait (name &amp; image like list view)</option>
       <option value="speed">Speed &amp; direction</option>
+      <option value="speedonly">Speed only</option>
+      <option value="directiononly">Direction only</option>
     </select>
   </div>
   <div class="section">
-    <h3 style="margin: 0 0 8px 0;">Loco images via HTTP</h3>
-    <small class="hint">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>. Local folder is fallback.</small>
-    <label style="margin-top:8px;">HTTP port (loco images)</label>
+    <h3 style="margin: 0 0 8px 0;">Loco images &amp; function icons via HTTP</h3>
+    <small class="hint">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.</small>
+    <label style="margin-top:8px;">HTTP port (loco images &amp; icons)</label>
     <input type="number" id="httpPort" placeholder="8080">
-    <label>HTTP base path (use / for root: http://host:port/&lt;filename&gt;)</label>
+    <label>HTTP base path for loco images (use / for root: http://host:port/&lt;filename&gt;)</label>
     <input type="text" id="httpBasePath" placeholder="/">
-    <label>Local image directory (fallback)</label>
-    <input type="text" id="localImageDir" placeholder="/path/to/rocrail/images">
+    <label>HTTP base path for function icons (empty = use loco image base path)</label>
+    <input type="text" id="httpIconBasePath" placeholder="empty = same as images">
   </div>
   <script>
     const PLUGIN_OLED_UUID = 'com.rocrail.lococontrol.oled';
@@ -84,7 +92,8 @@
             s.oledTextFontSize != null && s.oledTextFontSize !== '' ? String(s.oledTextFontSize) : '';
           document.getElementById('httpPort').value = s.httpPort || '8080';
           document.getElementById('httpBasePath').value = s.httpBasePath || '/';
-          document.getElementById('localImageDir').value = s.localImageDir || '';
+          document.getElementById('httpIconBasePath').value = s.httpIconBasePath || '';
+          document.getElementById('displayedLocos').value = s.displayedLocos || 'all';
           document.getElementById('locoListDialScroll').value = dialScrollFromSaved(s.locoListDialScroll);
         }
         if (msg.event === 'didReceiveSettings') {
@@ -93,8 +102,9 @@
           updatePerActionVisibility();
           if ((msg.action || '') === PLUGIN_OLED_UUID) {
             const ls = msg.payload?.settings || {};
+            const validThrottleViews = ['loco', 'speed', 'speedonly', 'directiononly'];
             document.getElementById('throttleView').value =
-              ls.throttleView === 'loco' || ls.throttleView === 'speed' ? ls.throttleView : 'function';
+              validThrottleViews.includes(ls.throttleView) ? ls.throttleView : 'function';
           }
         }
       };
@@ -117,7 +127,8 @@
           oledTextFontSize: ofs === '' ? '' : ofs,
           httpPort: document.getElementById('httpPort').value || '8080',
           httpBasePath: document.getElementById('httpBasePath').value || '/',
-          localImageDir: document.getElementById('localImageDir').value || '',
+          httpIconBasePath: document.getElementById('httpIconBasePath').value || '',
+          displayedLocos: document.getElementById('displayedLocos').value || 'all',
           locoListDialScroll: document.getElementById('locoListDialScroll').value || 'page',
         },
       }));
@@ -140,7 +151,8 @@
     document.getElementById('oledTextFontSize').addEventListener('change', saveGlobal);
     document.getElementById('httpPort').addEventListener('change', saveGlobal);
     document.getElementById('httpBasePath').addEventListener('change', saveGlobal);
-    document.getElementById('localImageDir').addEventListener('change', saveGlobal);
+    document.getElementById('httpIconBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('displayedLocos').addEventListener('change', saveGlobal);
     document.getElementById('locoListDialScroll').addEventListener('change', saveGlobal);
     document.getElementById('throttleView').addEventListener('change', saveThrottleView);
   </script>

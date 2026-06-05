@@ -258,6 +258,8 @@ function parseLcList(xml) {
         V: parseInt(attrs.V, 10) ?? -1,
         V_realkmh: parseInt(attrs.V_realkmh, 10) || 0,
         Vmaxkmh: parseInt(attrs.Vmaxkmh, 10) || 0,
+        mode_auto: attrs.mode_auto || '',
+        mode_halfauto: attrs.mode_halfauto || '',
       });
     }
   }

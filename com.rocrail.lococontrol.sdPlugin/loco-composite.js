@@ -12,7 +12,15 @@ import { join } from 'path';
 
 export const OLED_COMPOSITE_SIZE = 144;
 
-const CACHE_FORMAT_VERSION = 7;
+/** Upper bound for any user-configured OLED text font size (px). */
+export const MAX_OLED_TEXT_FONT_PX = 48;
+
+const CACHE_FORMAT_VERSION = 8;
+
+const ICON_CACHE_FORMAT_VERSION = 2;
+
+/** Max per-channel deviation from the mean (over opaque pixels) for an icon to count as a single-colour / monochrome glyph. */
+const ICON_MONOCHROME_TOLERANCE = 48;
 
 export function formatLocoDisplayName(loco) {
   const raw = (loco?.name || loco?.id || '?').toString();
@@ -105,7 +113,7 @@ async function renderTopHalfPng(displayText, size, half, bgRgb, fontSizePx = nul
   const auto = Math.min(24, Math.max(12, Math.floor(half * 0.32)));
   const fontSize =
     fontSizePx != null && Number.isFinite(fontSizePx)
-      ? Math.min(28, Math.max(8, Math.round(fontSizePx)))
+      ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
       : auto;
   const { r, g, b } = bgRgb;
   const textFill = textColorForBackground(r, g, b);
@@ -154,31 +162,53 @@ async function renderBottomHalfPng(sourceBuffer, size, half, padRgb) {
 }
 
 /**
- * Throttle OLED: speed (top) + direction (bottom), same split as loco list tiles.
+ * Throttle OLED: speed and/or direction on a solid black key with light typography.
  * @param {string} speedText
  * @param {boolean} dirForward
+ * @param {number} size
+ * @param {number|null} fontSizePx
+ * @param {'both'|'speed'|'direction'} mode `both` = speed (top) + direction (bottom); `speed`/`direction` = single centered line.
  */
 export async function renderThrottleSpeedDirPng(
   speedText,
   dirForward,
   size = OLED_COMPOSITE_SIZE,
-  fontSizePx = null
+  fontSizePx = null,
+  mode = 'both'
 ) {
   const half = size / 2;
   /** Speed/direction OLED: solid black backing and light typography. */
   const bgRgb = { r: 0, g: 0, b: 0 };
   const dirLine = dirForward ? '\u2192 Fwd' : '\u2190 Rev';
+  const fg = '#e8e8e8';
+  const fontFamily = 'system-ui,Segoe UI,sans-serif';
+
+  if (mode === 'speed' || mode === 'direction') {
+    const single = mode === 'speed' ? String(speedText ?? '') : dirLine;
+    const fs =
+      fontSizePx != null && Number.isFinite(fontSizePx)
+        ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
+        : Math.min(40, Math.max(14, Math.floor(size * 0.22)));
+    const weight = mode === 'direction' ? '600' : '400';
+    const svg = Buffer.from(
+      `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-weight="${weight}" font-family="${fontFamily}">${escapeXml(single)}</text>
+      </svg>`
+    );
+    return sharp(svg).png().toBuffer();
+  }
+
   const fsTop =
     fontSizePx != null && Number.isFinite(fontSizePx)
-      ? Math.min(26, Math.max(8, Math.round(fontSizePx)))
+      ? Math.min(30, Math.max(8, Math.round(fontSizePx)))
       : Math.min(22, Math.max(11, Math.floor(half * 0.28)));
-  const fsBot = Math.min(34, Math.max(10, Math.floor(fsTop * 1.35)));
-  const fg = '#e8e8e8';
+  const fsBot = Math.min(40, Math.max(10, Math.floor(fsTop * 1.35)));
   const svg = Buffer.from(
     `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
-      <text x="50%" y="${half * 0.5}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(String(speedText ?? ''))}</text>
-      <text x="50%" y="${half + half * 0.52}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsBot}" font-weight="600" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(dirLine)}</text>
+      <text x="50%" y="${half * 0.5}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="${fontFamily}">${escapeXml(String(speedText ?? ''))}</text>
+      <text x="50%" y="${half + half * 0.52}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsBot}" font-weight="600" font-family="${fontFamily}">${escapeXml(dirLine)}</text>
     </svg>`
   );
   return sharp(svg).png().toBuffer();
@@ -265,6 +295,112 @@ export async function getCachedCompositePng(cacheDir, locoId, displayText, sourc
     return await readFile(filePath);
   } catch {
     const png = await renderLocoCompositePng(sourceBuffer, displayText, OLED_COMPOSITE_SIZE, fontSizePx);
+    await writeFile(filePath, png);
+    return png;
+  }
+}
+
+/**
+ * True if every sufficiently-opaque pixel in a raw RGBA buffer shares (within tolerance) the same colour,
+ * i.e. the icon is a single-colour / monochrome glyph (black line art, a white symbol, one solid hue, …).
+ */
+function isMonochromeRgba(data, channels) {
+  if (channels !== 4) return false;
+  let count = 0;
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 16) continue;
+    sumR += data[i];
+    sumG += data[i + 1];
+    sumB += data[i + 2];
+    count++;
+  }
+  if (count === 0) return false;
+  const mR = sumR / count;
+  const mG = sumG / count;
+  const mB = sumB / count;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] < 16) continue;
+    if (
+      Math.abs(data[i] - mR) > ICON_MONOCHROME_TOLERANCE ||
+      Math.abs(data[i + 1] - mG) > ICON_MONOCHROME_TOLERANCE ||
+      Math.abs(data[i + 2] - mB) > ICON_MONOCHROME_TOLERANCE
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Function-key tile showing a Rocrail function icon centered on the on/off state background
+ * (white when on, black when off). Falls back to a blank state tile when no icon bytes are given.
+ *
+ * Monochrome glyphs are recoloured to contrast with the background (black on the white "on" key,
+ * white on the black "off" key) so a single-colour icon never blends into its background.
+ */
+export async function renderFunctionIconPng(iconBuffer, on, size = OLED_COMPOSITE_SIZE) {
+  const bg = on ? { r: 255, g: 255, b: 255, alpha: 1 } : { r: 0, g: 0, b: 0, alpha: 1 };
+  const base = () => sharp({ create: { width: size, height: size, channels: 4, background: bg } });
+  if (!iconBuffer?.length) {
+    return base().png().toBuffer();
+  }
+  try {
+    const inner = Math.round(size * 0.7);
+    const { data, info } = await sharp(iconBuffer)
+      .rotate()
+      .resize({ width: inner, height: inner, fit: 'inside', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    let pixels = data;
+    if (isMonochromeRgba(data, info.channels)) {
+      // Contrast colour: black glyph on the white (on) key, white glyph on the black (off) key.
+      const c = on ? 0 : 255;
+      pixels = Buffer.from(data);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = c;
+        pixels[i + 1] = c;
+        pixels[i + 2] = c;
+      }
+    }
+
+    const left = Math.max(0, Math.floor((size - info.width) / 2));
+    const top = Math.max(0, Math.floor((size - info.height) / 2));
+    return base()
+      .composite([
+        { input: pixels, raw: { width: info.width, height: info.height, channels: info.channels }, left, top },
+      ])
+      .png()
+      .toBuffer();
+  } catch {
+    return base().png().toBuffer();
+  }
+}
+
+export function functionIconCacheFileKey(iconName, on, sourceHash) {
+  return crypto
+    .createHash('sha256')
+    .update(`icon|${ICON_CACHE_FORMAT_VERSION}|${iconName}|${on ? 1 : 0}|${sourceHash}`)
+    .digest('hex')
+    .slice(0, 32);
+}
+
+/**
+ * Returns a function-icon PNG buffer, rendered once and cached on disk per icon bytes + on/off state.
+ */
+export async function getCachedFunctionIconPng(cacheDir, iconName, on, sourceBuffer) {
+  await mkdir(cacheDir, { recursive: true });
+  const srcHash = sourceContentHash(sourceBuffer);
+  const key = functionIconCacheFileKey(iconName, on, srcHash);
+  const filePath = join(cacheDir, `${key}.png`);
+  try {
+    return await readFile(filePath);
+  } catch {
+    const png = await renderFunctionIconPng(sourceBuffer, on, OLED_COMPOSITE_SIZE);
     await writeFile(filePath, png);
     return png;
   }

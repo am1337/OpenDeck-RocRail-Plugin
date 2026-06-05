@@ -4,6 +4,9 @@
   "description": "OpenAction plugin for OpenDeck to control Rocrail model trains",
   "main": "index.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
   "scripts": {
     "start": "node index.js"
   },

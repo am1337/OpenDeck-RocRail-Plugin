@@ -8,19 +8,24 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 
 - [OpenDeck](https://github.com/nekename/OpenDeck)
 - [Rocrail](https://wiki.rocrail.net) running with client access (**RCP over TCP**, default control port **8051**)
-- Rocrail’s **web / HTTP service enabled** where you host locomotive images (often port **8080**; depends on Rocview/Rocweb settings)
-- Node.js 20 or newer (bundled invocation by OpenDeck / OpenAction)
+- Rocrail’s **web / HTTP service enabled** where you host locomotive images and function icons (often port **8080**; depends on Rocview/Rocweb settings)
+- Node.js 18.17 or newer (bundled invocation by OpenDeck / OpenAction)
 
-## Installation
+## Build
 
 1. Install dependencies:
    ```bash
    cd com.rocrail.lococontrol.sdPlugin
    npm install
    ```
+2. Create archive
+   zip -r com.rocrail.lococontrol.streamDeckPlugin com.rocrail.lococontrol.sdPlugin
 
-2. Copy the `com.rocrail.lococontrol.sdPlugin` folder to your OpenDeck plugins directory  
-   Open OpenDeck → Settings → “Open config directory” → drop the folder into `plugins`.
+## Installation
+
+1. Build or download `com.rocrail.lococontrol.streamDeckPlugin` from github
+
+2. On OpenDeck go to `Plugins` choose `Install from file` and select the built or downloaded file.
 
 3. Restart OpenDeck.
 
@@ -30,11 +35,13 @@ Rocrail’s **RCP client/server** channel (TCP control port), **HTTP image servi
 
 Global options (Rocrail TCP, HTTP image service, font size, scroll step) are edited from **any** Rocrail Property Inspector instance—**you only need to open the inspector once for those shared fields**; they apply to the whole plugin/profile.
 
-**Throttle view** (Functions / Loco / Speed) is **stored per OLED button**: open the inspector on each OLED key you want to change and choose its mode.
+**Throttle view** (Functions / Loco / Speed &amp; direction / Speed only / Direction only) is **stored per OLED button**: open the inspector on each OLED key you want to change and choose its mode.
    - **Rocrail TCP host / port**: must match where Rocrail accepts **client protocol** commands (Rocview/OpenDecoder‑style TCP, commonly **8051** per [Rocrail protocol](https://wiki.rocrail.net/doku.php?id=develop:cs-protocol-en)).
-   - **HTTP port / base path** and optional **local image directory**: locomotive composites are fetched from  
-     `http://<TCP host>:<http port>/<path>/<image filename>` (see Rocview image / web‑service docs). Matching host is usually the same PC as Rocrail; use your real HTTP listener port.
-   - **OLED composite / labelled text font size** (pixels, optional): empty keeps automatic sizing; non‑zero values propagate to composites and OLED titles (when the host honours `setTitleParameters`).
+   - **HTTP port / base path**: locomotive composites are fetched from  
+     `http://<TCP host>:<http port>/<image base path>/<image filename>` (see Rocview image / web‑service docs). Matching host is usually the same PC as Rocrail; use your real HTTP listener port.
+   - **HTTP base path for function icons** (optional): when a function defines an `icon`, it is fetched from `http://<TCP host>:<http port>/<icon base path>/<icon filename>` and shown instead of the function label. Leave empty to reuse the loco image base path. Icons are cached (in memory and on disk) like loco images.
+   - **OLED composite / labelled text font size** (pixels, optional, up to **48**): empty keeps automatic sizing; non‑zero values propagate to composites and OLED titles (when the host honours `setTitleParameters`).
+   - **Displayed locos**: which locomotives appear in the list — **All locos** (default), **No locos in auto mode** (hides locos with `mode_auto="auto"`), or **No locos in auto or half-auto mode** (also hides locos with `mode_halfauto="halfauto"`).
    - **Scroll …**: default mode is **one page per encoder step** (visible OLED count).
 
 **Throttle view (Rocview terminology)** is **only for OLED keys** while a locomotive is selected:
@@ -63,9 +70,11 @@ Encoder, OLED dial rotate, or dedicated scroll hardware moves through the roster
 
 ### Throttle mode (after selecting a loco)
 
-- **Functions** OLEDs (default): monochrome keys with wrapped function labels (`fn` replay); presses toggle decoder functions only. Direction and velocity are not sent separately on each toggle; the `<fn/>` snapshot mirrors **live throttle state** (`V`, `dir`, and all relevant `f0`–`fn` bits). At startup their on/off hints are seeded from **`lclist` + `<model cmd="plan"/>` snippets** merged into an internal cache, then kept up to date from RCP pushes while you browse the roster.
+- **Functions** OLEDs (default): monochrome keys with wrapped function labels (`fn` replay); presses toggle decoder functions only. When a function defines an `icon`, the fetched icon image is shown (centered on the on/off background) instead of the `F0`/name label. **Monochrome** (single‑colour) icons are automatically recoloured to contrast with the key background — black on the white *on* key, white on the black *off* key — so they never blend in; multi‑colour icons are shown unchanged. Direction and velocity are not sent separately on each toggle; the `<fn/>` snapshot mirrors **live throttle state** (`V`, `dir`, and all relevant `f0`–`fn` bits). At startup their on/off hints are seeded from **`lclist` + `<model cmd="plan"/>` snippets** merged into an internal cache, then kept up to date from RCP pushes while you browse the roster.
 - **Loco portrait** OLED: Tap returns to **loco list** (releases the locomotive like **Back**).
 - **Speed & direction** OLED: Solid **black** key with light text; while **moving** (percent throttle &gt; 0 **or** `V_realkmh` &gt; 0), tap sends **speed 0**. When stopped, tap **toggles direction** (forward ⇄ reverse).
+- **Speed only** OLED: shows just the speed on a black key; tap sends **speed 0** while moving.
+- **Direction only** OLED: shows just the direction on a black key; tap **toggles direction** (forward ⇄ reverse).
 
 Dedicated **Fwd/Rev**, **speed dial**, **±5 %**, and **hard stop** keys still issue separate `direction` / `velocity` commands.
 
