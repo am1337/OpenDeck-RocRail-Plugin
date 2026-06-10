@@ -10,7 +10,7 @@
   "PropertyInspectorPath": "pi/index.html",
   "CodePath": "index.js",
   "Nodejs": {
-    "Version": "18"
+    "Version": "20"
   },
   "Software": {
     "MinimumVersion": "6.4"

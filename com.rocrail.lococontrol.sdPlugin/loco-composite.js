@@ -8,7 +8,36 @@
 import sharp from 'sharp';
 import crypto from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Direction arrow glyphs (monochrome SVGs) reused on speed/direction throttle tiles. */
+const DIRECTION_ARROW_SVG = {
+  forward: join(__dirname, 'icons', 'forward.svg'),
+  reverse: join(__dirname, 'icons', 'reverse.svg'),
+};
+/** Cache rasterised, recoloured direction arrows by `${dir}|${box}|${color}`. */
+const _directionArrowCache = new Map();
+
+/**
+ * Rasterise the forward/reverse arrow SVG at `boxSize`, recoloured to `color`
+ * (the monochrome glyph uses #000000, swapped here for the tile foreground).
+ */
+async function getDirectionArrowPng(forward, boxSize, color) {
+  const key = `${forward ? 'fwd' : 'rev'}|${boxSize}|${color}`;
+  const cached = _directionArrowCache.get(key);
+  if (cached) return cached;
+  let svg = await readFile(DIRECTION_ARROW_SVG[forward ? 'forward' : 'reverse'], 'utf8');
+  svg = svg.replace(/#000000/gi, color);
+  const png = await sharp(Buffer.from(svg))
+    .resize(boxSize, boxSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+  _directionArrowCache.set(key, png);
+  return png;
+}
 
 export const OLED_COMPOSITE_SIZE = 144;
 
@@ -179,39 +208,49 @@ export async function renderThrottleSpeedDirPng(
   const half = size / 2;
   /** Speed/direction OLED: solid black backing and light typography. */
   const bgRgb = { r: 0, g: 0, b: 0 };
-  const dirLine = dirForward ? '\u2192 Fwd' : '\u2190 Rev';
   const fg = '#e8e8e8';
   const fontFamily = 'system-ui,Segoe UI,sans-serif';
+  const blackTile = () =>
+    sharp({ create: { width: size, height: size, channels: 4, background: { ...bgRgb, alpha: 1 } } });
 
-  if (mode === 'speed' || mode === 'direction') {
-    const single = mode === 'speed' ? String(speedText ?? '') : dirLine;
+  if (mode === 'direction') {
+    const box = Math.round(size * 0.62);
+    const arrow = await getDirectionArrowPng(dirForward, box, fg);
+    const off = Math.round((size - box) / 2);
+    return blackTile().composite([{ input: arrow, left: off, top: off }]).png().toBuffer();
+  }
+
+  if (mode === 'speed') {
+    const single = String(speedText ?? '');
     const fs =
       fontSizePx != null && Number.isFinite(fontSizePx)
         ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
         : Math.min(40, Math.max(14, Math.floor(size * 0.22)));
-    const weight = mode === 'direction' ? '600' : '400';
     const svg = Buffer.from(
       `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
         <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-weight="${weight}" font-family="${fontFamily}">${escapeXml(single)}</text>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="${fontFamily}">${escapeXml(single)}</text>
       </svg>`
     );
     return sharp(svg).png().toBuffer();
   }
 
+  // mode === 'both': speed text on the top half, direction arrow on the bottom half.
   const fsTop =
     fontSizePx != null && Number.isFinite(fontSizePx)
-      ? Math.min(30, Math.max(8, Math.round(fontSizePx)))
+      ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
       : Math.min(22, Math.max(11, Math.floor(half * 0.28)));
-  const fsBot = Math.min(40, Math.max(10, Math.floor(fsTop * 1.35)));
-  const svg = Buffer.from(
+  const topSvg = Buffer.from(
     `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
       <text x="50%" y="${half * 0.5}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="${fontFamily}">${escapeXml(String(speedText ?? ''))}</text>
-      <text x="50%" y="${half + half * 0.52}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsBot}" font-weight="600" font-family="${fontFamily}">${escapeXml(dirLine)}</text>
     </svg>`
   );
-  return sharp(svg).png().toBuffer();
+  const box = Math.round(half * 0.82);
+  const arrow = await getDirectionArrowPng(dirForward, box, fg);
+  const left = Math.round((size - box) / 2);
+  const top = Math.round(half + (half - box) / 2);
+  return sharp(topSvg).composite([{ input: arrow, left, top }]).png().toBuffer();
 }
 
 export async function renderLocoCompositePng(
@@ -280,6 +319,66 @@ export async function getFnKeyOffBackgroundDataUri() {
     .toBuffer();
   _fnKeyOffBlackDataUri = `data:image/png;base64,${buf.toString('base64')}`;
   return _fnKeyOffBlackDataUri;
+}
+
+/** Word-wrap a function label into at most `maxLines` lines of `maxCharsPerLine` characters. */
+function wrapLabelLines(text, maxCharsPerLine, maxLines) {
+  let s = (String(text ?? '').trim() || '?').replace(/\s+/g, ' ');
+  const lines = [];
+  for (let L = 0; L < maxLines && s.length; L++) {
+    if (s.length <= maxCharsPerLine || L === maxLines - 1) {
+      lines.push(L === maxLines - 1 && s.length > maxCharsPerLine ? `${s.slice(0, maxCharsPerLine - 1)}…` : s);
+      break;
+    }
+    let cut = s.lastIndexOf(' ', maxCharsPerLine);
+    if (cut <= 0) cut = maxCharsPerLine;
+    lines.push(s.slice(0, cut).trimEnd());
+    s = s.slice(cut).trimStart();
+  }
+  return lines;
+}
+
+/** @type {Map<string, Buffer>} rendered function-label tiles keyed by label|on|fontSize|size */
+const _fnLabelTileCache = new Map();
+
+/**
+ * Function-key tile with the label text baked into the image (white-on-black when off,
+ * black-on-white when on). Needed because OpenDeck ignores `setTitleParameters`, so title
+ * font sizes cannot follow the configured OLED font size; image text can.
+ */
+export async function renderFunctionLabelPng(labelText, on, size = OLED_COMPOSITE_SIZE, fontSizePx = null) {
+  const fs =
+    fontSizePx != null && Number.isFinite(fontSizePx)
+      ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
+      : Math.min(26, Math.max(14, Math.floor(size * 0.15)));
+  const key = `${labelText}|${on ? 1 : 0}|${fs}|${size}`;
+  const cached = _fnLabelTileCache.get(key);
+  if (cached) return cached;
+
+  // Wrap to what fits at this font size (approx. average glyph width 0.58 em).
+  const maxChars = Math.max(3, Math.floor((size - 8) / (fs * 0.58)));
+  const maxLines = Math.max(1, Math.min(5, Math.floor(size / (fs * 1.3))));
+  const lines = wrapLabelLines(labelText, maxChars, maxLines);
+
+  const bg = on ? '#ffffff' : '#000000';
+  const fg = on ? '#000000' : '#ffffff';
+  const lineH = fs * 1.25;
+  const firstCenterY = size / 2 - ((lines.length - 1) * lineH) / 2;
+  const texts = lines
+    .map(
+      (line, i) =>
+        `<text x="50%" y="${firstCenterY + i * lineH}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(line)}</text>`
+    )
+    .join('');
+  const svg = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${size}" height="${size}" fill="${bg}"/>
+      ${texts}
+    </svg>`
+  );
+  const png = await sharp(svg).png().toBuffer();
+  _fnLabelTileCache.set(key, png);
+  return png;
 }
 
 /**

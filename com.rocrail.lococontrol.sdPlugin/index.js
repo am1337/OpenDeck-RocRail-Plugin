@@ -24,6 +24,7 @@ import {
   getCachedFunctionIconPng,
   getFnKeyOffBackgroundDataUri,
   getFnKeyOnBackgroundDataUri,
+  renderFunctionLabelPng,
   renderThrottleSpeedDirPng,
   sourceContentHash,
 } from './loco-composite.js';
@@ -1380,11 +1381,19 @@ class RocrailPlugin {
           this.setState(ctx, on ? 1 : 0);
           continue;
         }
-        const label = wrapFnLabel(def.text || `F${def.fn}`, 9, 4);
-        const uri = on ? await getFnKeyOnBackgroundDataUri() : await getFnKeyOffBackgroundDataUri();
-        this.setImage(ctx, uri);
-        this.setTitle(ctx, label);
-        this._setTitleParametersMaybe(ctx);
+        // Label baked into the image: OpenDeck ignores setTitleParameters, so the configured
+        // font size only takes effect for image-rendered text.
+        try {
+          const png = await renderFunctionLabelPng(def.text || `F${def.fn}`, on, undefined, compositeFontPx);
+          this.setImage(ctx, `data:image/png;base64,${png.toString('base64')}`);
+          this.setTitle(ctx, '');
+        } catch (e) {
+          this.log(`fn label tile render failed: ${e?.message || String(e)}`);
+          const uri = on ? await getFnKeyOnBackgroundDataUri() : await getFnKeyOffBackgroundDataUri();
+          this.setImage(ctx, uri);
+          this.setTitle(ctx, wrapFnLabel(def.text || `F${def.fn}`, 9, 4));
+          this._setTitleParametersMaybe(ctx);
+        }
         this.setState(ctx, on ? 1 : 0);
       }
     }
