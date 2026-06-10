@@ -37,6 +37,23 @@
       <option value="single">One unit per step</option>
     </select>
   </div>
+  <div id="accessoryInstanceSection" class="section" style="display: none;">
+    <h3 style="margin: 0 0 8px 0;">This Accessory key</h3>
+    <small class="hint">Controls or displays one track-diagram element of the Rocrail plan, independent of loco selection. Turnouts, signals and outputs/buttons flip on press; turntables step to the next track; sensors, blocks and tracks are status-only.</small>
+    <label>Item ID (as in the Rocrail plan)</label>
+    <input type="text" id="accItemId" placeholder="e.g. sw1, sg2, co3, fb4, bk01">
+    <label>Item type</label>
+    <select id="accItemType">
+      <option value="auto">Auto-detect (search the plan by ID)</option>
+      <option value="sw">Turnout / crossing / three-way / decoupler (sw)</option>
+      <option value="sg">Signal (sg)</option>
+      <option value="co">Output / button (co)</option>
+      <option value="tt">Turntable (tt)</option>
+      <option value="fb">Sensor (fb, status only)</option>
+      <option value="bk">Block (bk, status only)</option>
+      <option value="tk">Track (tk, status only)</option>
+    </select>
+  </div>
   <div id="oledInstanceSection" class="section" style="display: none;">
     <h3 style="margin: 0 0 8px 0;">This OLED key (Throttle / Loco-control view)</h3>
     <small class="hint">Rocview throttle view modes: applies only while controlling a locomotive. Each OLED key may show functions, loco portrait, or speed/direction independently.</small>
@@ -58,9 +75,12 @@
     <input type="text" id="httpBasePath" placeholder="/">
     <label>HTTP base path for function icons (empty = use loco image base path)</label>
     <input type="text" id="httpIconBasePath" placeholder="empty = same as images">
+    <label>HTTP base path for accessory SVG theme (empty = built-in symbols)</label>
+    <input type="text" id="accessorySvgBasePath" placeholder="/svg/themes/SpDrS60">
   </div>
   <script>
     const PLUGIN_OLED_UUID = 'com.rocrail.lococontrol.oled';
+    const PLUGIN_ACCESSORY_UUID = 'com.rocrail.lococontrol.accessory';
     let ws, inspectorSocketUuid, actionInstanceUuid, activeActionUuid;
 
     function dialScrollFromSaved(v) {
@@ -93,6 +113,7 @@
           document.getElementById('httpPort').value = s.httpPort || '8080';
           document.getElementById('httpBasePath').value = s.httpBasePath || '/';
           document.getElementById('httpIconBasePath').value = s.httpIconBasePath || '';
+          document.getElementById('accessorySvgBasePath').value = s.accessorySvgBasePath || '';
           document.getElementById('displayedLocos').value = s.displayedLocos || 'all';
           document.getElementById('locoListDialScroll').value = dialScrollFromSaved(s.locoListDialScroll);
         }
@@ -106,13 +127,21 @@
             document.getElementById('throttleView').value =
               validThrottleViews.includes(ls.throttleView) ? ls.throttleView : 'function';
           }
+          if ((msg.action || '') === PLUGIN_ACCESSORY_UUID) {
+            const ls = msg.payload?.settings || {};
+            document.getElementById('accItemId').value = ls.itemId || '';
+            const validKinds = ['sw', 'sg', 'co', 'tt', 'fb', 'bk', 'tk'];
+            document.getElementById('accItemType').value = validKinds.includes(ls.itemType) ? ls.itemType : 'auto';
+          }
         }
       };
     }
 
     function updatePerActionVisibility() {
-      const sec = document.getElementById('oledInstanceSection');
-      sec.style.display = activeActionUuid === PLUGIN_OLED_UUID ? 'block' : 'none';
+      document.getElementById('oledInstanceSection').style.display =
+        activeActionUuid === PLUGIN_OLED_UUID ? 'block' : 'none';
+      document.getElementById('accessoryInstanceSection').style.display =
+        activeActionUuid === PLUGIN_ACCESSORY_UUID ? 'block' : 'none';
     }
 
     function saveGlobal() {
@@ -128,8 +157,22 @@
           httpPort: document.getElementById('httpPort').value || '8080',
           httpBasePath: document.getElementById('httpBasePath').value || '/',
           httpIconBasePath: document.getElementById('httpIconBasePath').value || '',
+          accessorySvgBasePath: document.getElementById('accessorySvgBasePath').value || '',
           displayedLocos: document.getElementById('displayedLocos').value || 'all',
           locoListDialScroll: document.getElementById('locoListDialScroll').value || 'page',
+        },
+      }));
+    }
+
+    function saveAccessory() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !actionInstanceUuid || activeActionUuid !== PLUGIN_ACCESSORY_UUID)
+        return;
+      ws.send(JSON.stringify({
+        event: 'setSettings',
+        context: actionInstanceUuid,
+        payload: {
+          itemId: document.getElementById('accItemId').value.trim(),
+          itemType: document.getElementById('accItemType').value || 'auto',
         },
       }));
     }
@@ -152,9 +195,12 @@
     document.getElementById('httpPort').addEventListener('change', saveGlobal);
     document.getElementById('httpBasePath').addEventListener('change', saveGlobal);
     document.getElementById('httpIconBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('accessorySvgBasePath').addEventListener('change', saveGlobal);
     document.getElementById('displayedLocos').addEventListener('change', saveGlobal);
     document.getElementById('locoListDialScroll').addEventListener('change', saveGlobal);
     document.getElementById('throttleView').addEventListener('change', saveThrottleView);
+    document.getElementById('accItemId').addEventListener('change', saveAccessory);
+    document.getElementById('accItemType').addEventListener('change', saveAccessory);
   </script>
 </body>
 </html>

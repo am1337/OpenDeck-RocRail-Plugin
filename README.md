@@ -53,6 +53,7 @@ Open the Property Inspector on **any** placed Rocrail action to reach the shared
 | Hardware | Action | Typical use |
 |---------|--------|-------------|
 | OLED | Rocrail OLED Button | Loco list tiles; throttle functions/loco/speed (per‑key inspector option) |
+| OLED / Simple | Rocrail Accessory | Switch one turnout / signal / output, or watch a sensor / block (independent of loco control) |
 | Simple | Direction Fwd / Rev | Toggle direction (`lc.direction`) |
 | Simple | Stop loco / Speed +5% / −5% | Convenience speed keys |
 | Encoder | Rocrail Speed Dial | Speed steps in throttle (`lc.velocity`); press stop when throttle screen active |
@@ -81,6 +82,15 @@ Dedicated **Fwd/Rev**, **speed dial**, **±5 %**, and **hard stop** keys still
 ### Back
 
 Stops velocity, sends `release`, and returns to loco selection.
+
+### Accessory keys (track-diagram elements)
+
+The **Rocrail Accessory** action binds one key to one element of the Rocrail plan ([track diagram elements](https://www.rocrail.online/doku.php?id=track-diagram-elements-en)) — completely **independent of loco selection**; a deck can also consist of accessory keys only.
+
+- **Per-key settings** (inspector on that key): **Item ID** as named in the Rocrail plan, plus the **item type** — *Auto-detect* searches the plan by ID; explicit choices are turnout (`sw`, incl. crossings, three-way, decoupler), signal (`sg`), output/button (`co`), turntable (`tt`), and the status-only kinds sensor (`fb`), block (`bk`), track (`tk`).
+- **Press**: turnouts, signals and outputs send `cmd="flip"`; turntables send `cmd="next"`. Status-only kinds ignore presses.
+- **Display**: the tile shows the element name and a symbol reflecting the **live state** (turnout straight/thrown incl. three-way & double-slip positions, signal aspect colour, output on/off, sensor on/off, block free/reserved/occupied/closed, turntable bridge position). Initial states come from the plan loaded at startup; every Rocrail broadcast (`<sw/>`, `<sg/>`, `<co/>`, `<fb/>`, `<bk/>`, `<tt/>`, …) updates the affected tiles immediately.
+- **Icons from the Rocrail server**: set the global **accessory SVG theme base path** (e.g. `/svg/themes/SpDrS60` when the HTTP service serves the Rocrail `svg` folder). The plugin then fetches the official theme symbols by their standard names (`turnoutleft-t.svg`, `signalmain-g.svg`, `sensor-on.svg`, `block-occ.svg`, `button-0-on.svg`, …) and caches them. When the path is empty or a file is missing, clear **built-in symbols** are drawn instead.
 
 ## Rocrail protocol (summary)
 

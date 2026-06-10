@@ -50,6 +50,23 @@
       ]
     },
     {
+      "Name": "Rocrail Accessory",
+      "UUID": "com.rocrail.lococontrol.accessory",
+      "Tooltip": "Control or watch one track-diagram element (turnout, signal, output/button, turntable; sensors/blocks/tracks status-only). Configure the item ID in the inspector.",
+      "Icon": "actions/accessory",
+      "Controllers": ["Keypad", "Encoder"],
+      "States": [
+        {
+          "Image": "actions/accessory",
+          "Title": "",
+          "ShowTitle": true,
+          "TitleAlignment": "middle",
+          "FontSize": 11,
+          "TitleColor": "#FFFFFFFF"
+        }
+      ]
+    },
+    {
       "Name": "Rocrail Direction Fwd",
       "UUID": "com.rocrail.lococontrol.dirfwd",
       "Tooltip": "Set loco direction forward",

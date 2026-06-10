@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { accessoryOriRotationCw } from './rocrail-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -319,6 +320,170 @@ export async function getFnKeyOffBackgroundDataUri() {
     .toBuffer();
   _fnKeyOffBlackDataUri = `data:image/png;base64,${buf.toString('base64')}`;
   return _fnKeyOffBlackDataUri;
+}
+
+/* ------------------------------------------------------------------------ *
+ * Accessory tiles (turnouts, signals, outputs, sensors, blocks, tracks, …)
+ * ------------------------------------------------------------------------ */
+
+const ACC_ACTIVE = '#f7dc6f';
+const ACC_INACTIVE = '#5a5a6e';
+const ACC_TEXT = '#e8e8e8';
+
+/** Built-in SVG glyph (100×100 viewBox contents) for an accessory kind/type/state. */
+function accessoryGlyphSvg(info) {
+  const kind = info.kind || '';
+  const type = String(info.type ?? '').toLowerCase();
+  const state = String(info.state ?? '').toLowerCase();
+  const lw = 10;
+  const line = (x1, y1, x2, y2, color, w = lw) =>
+    `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`;
+
+  if (kind === 'sw') {
+    if (type === 'decoupler') {
+      const on = state === 'on';
+      return line(5, 50, 95, 50, ACC_ACTIVE) + `<rect x="40" y="28" width="20" height="44" rx="4" fill="${on ? '#e74c3c' : ACC_INACTIVE}"/>`;
+    }
+    if (type === 'crossing' || type === 'ccrossing') {
+      return line(5, 50, 95, 50, ACC_ACTIVE) + line(20, 90, 80, 10, ACC_ACTIVE);
+    }
+    if (type === 'threeway') {
+      const cLeft = state === 'left' ? ACC_ACTIVE : ACC_INACTIVE;
+      const cRight = state === 'right' ? ACC_ACTIVE : ACC_INACTIVE;
+      const cStraight = state === 'left' || state === 'right' ? ACC_INACTIVE : ACC_ACTIVE;
+      return (
+        line(5, 50, 50, 50, ACC_ACTIVE) +
+        line(50, 50, 95, 50, cStraight) +
+        line(50, 50, 90, 15, cLeft) +
+        line(50, 50, 90, 85, cRight)
+      );
+    }
+    if (type === 'dcrossing') {
+      const thrown = state === 'turnout' || state === 'left' || state === 'right';
+      return (
+        line(5, 50, 95, 50, thrown ? ACC_INACTIVE : ACC_ACTIVE) +
+        line(20, 90, 80, 10, thrown ? ACC_ACTIVE : ACC_INACTIVE)
+      );
+    }
+    // plain left / right turnout
+    const thrown = state === 'turnout';
+    const up = type !== 'right';
+    const branch = line(50, 50, 90, up ? 15 : 85, thrown ? ACC_ACTIVE : ACC_INACTIVE);
+    const straight = line(50, 50, 95, 50, thrown ? ACC_INACTIVE : ACC_ACTIVE);
+    return line(5, 50, 50, 50, ACC_ACTIVE) + straight + branch;
+  }
+
+  if (kind === 'sg') {
+    const aspect =
+      state === 'green' ? '#2ecc71' : state === 'yellow' ? '#f1c40f' : state === 'white' ? '#ecf0f1' : state === 'blank' ? ACC_INACTIVE : '#e74c3c';
+    return (
+      line(50, 95, 50, 60, ACC_TEXT, 7) +
+      line(30, 95, 70, 95, ACC_TEXT, 7) +
+      `<circle cx="50" cy="35" r="24" fill="${aspect}" stroke="${ACC_TEXT}" stroke-width="5"/>`
+    );
+  }
+
+  if (kind === 'co') {
+    const on = state === 'on';
+    const fill = on ? '#2ecc71' : '#e74c3c';
+    return `<rect x="20" y="20" width="60" height="60" rx="12" fill="${fill}" stroke="${fill}" stroke-width="4"/>`;
+  }
+
+  if (kind === 'fb') {
+    const on = state === 'true';
+    return (
+      line(5, 50, 95, 50, ACC_INACTIVE) +
+      `<circle cx="50" cy="50" r="22" fill="${on ? '#e74c3c' : '#1a1a1a'}" stroke="${on ? '#e74c3c' : ACC_INACTIVE}" stroke-width="7"/>`
+    );
+  }
+
+  if (kind === 'bk') {
+    const occupied = !!String(info.locid ?? '').trim();
+    const reserved = occupied && state.startsWith('res');
+    const closed = state === 'closed';
+    const fill = reserved ? '#b7950b' : occupied ? '#922b21' : 'none';
+    const cross = closed ? line(18, 32, 82, 68, '#e74c3c', 7) + line(18, 68, 82, 32, '#e74c3c', 7) : '';
+    return `<rect x="8" y="26" width="84" height="48" rx="6" fill="${fill}" stroke="${ACC_TEXT}" stroke-width="6"/>${cross}`;
+  }
+
+  if (kind === 'tk') {
+    if (type === 'curve') return `<path d="M 5 95 Q 50 50 95 95" fill="none" stroke="${ACC_ACTIVE}" stroke-width="${lw}" stroke-linecap="round"/>`;
+    if (type === 'buffer') return line(5, 50, 75, 50, ACC_ACTIVE) + line(75, 25, 75, 75, '#e74c3c', 8);
+    if (type === 'dir' || type === 'dirall') return line(5, 50, 80, 50, ACC_ACTIVE) + `<path d="M 65 30 L 92 50 L 65 70 Z" fill="${ACC_ACTIVE}"/>`;
+    return line(5, 50, 95, 50, ACC_ACTIVE);
+  }
+
+  if (kind === 'tt') {
+    const pos = String(info.bridgepos ?? '').trim();
+    return (
+      `<circle cx="50" cy="50" r="42" fill="none" stroke="${ACC_INACTIVE}" stroke-width="6"/>` +
+      line(22, 78, 78, 22, ACC_ACTIVE, 9) +
+      (pos
+        ? `<text x="50" y="56" text-anchor="middle" fill="${ACC_TEXT}" font-size="30" font-family="system-ui,sans-serif">${escapeXml(pos)}</text>`
+        : '')
+    );
+  }
+
+  return `<text x="50" y="62" text-anchor="middle" fill="${ACC_INACTIVE}" font-size="56" font-family="system-ui,sans-serif">?</text>`;
+}
+
+/**
+ * Accessory OLED tile: item name on top, state-dependent symbol below.
+ * Uses `info.iconBuffer` (icon fetched from the Rocrail server / SVG theme) when
+ * given, otherwise a built-in glyph. Black background, light typography.
+ *
+ * @param {{kind?: string, type?: string, state?: string, locid?: string, bridgepos?: string|number, ori?: string, name: string, iconBuffer?: Buffer|null}} info
+ */
+export async function renderAccessoryTilePng(info, size = OLED_COMPOSITE_SIZE, fontSizePx = null) {
+  const name = String(info?.name ?? '').trim() || '?';
+  const rot = accessoryOriRotationCw(info?.ori);
+  const fs =
+    fontSizePx != null && Number.isFinite(fontSizePx)
+      ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
+      : Math.min(22, Math.max(12, Math.floor(size * 0.13)));
+  const stripH = Math.max(Math.round(size * 0.24), Math.round(fs * 1.5));
+  const iconBox = size - stripH;
+  const iconCx = size / 2;
+  const iconCy = stripH + iconBox / 2;
+
+  const maxChars = Math.max(3, Math.floor((size - 6) / (fs * 0.58)));
+  const label = name.length > maxChars ? `${name.slice(0, maxChars - 1)}…` : name;
+
+  const baseSvg = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${size}" height="${size}" fill="#000000"/>
+      <text x="50%" y="${stripH / 2}" dominant-baseline="middle" text-anchor="middle" fill="${ACC_TEXT}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(label)}</text>
+    </svg>`
+  );
+
+  if (info?.iconBuffer?.length) {
+    try {
+      const inner = Math.round(iconBox * 0.92);
+      let pipeline = sharp(info.iconBuffer).resize(inner, inner, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      });
+      if (rot) {
+        pipeline = pipeline.rotate(rot, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
+      }
+      const { data, info: meta } = await pipeline.png().toBuffer({ resolveWithObject: true });
+      const left = Math.round(iconCx - meta.width / 2);
+      const top = Math.round(iconCy - meta.height / 2);
+      return sharp(baseSvg).composite([{ input: data, left, top }]).png().toBuffer();
+    } catch {
+      // fall through to the built-in glyph
+    }
+  }
+
+  const glyphScale = (iconBox * 0.9) / 100;
+  const svg = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${size}" height="${size}" fill="#000000"/>
+      <text x="50%" y="${stripH / 2}" dominant-baseline="middle" text-anchor="middle" fill="${ACC_TEXT}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(label)}</text>
+      <g transform="translate(${iconCx} ${iconCy}) rotate(${rot}) scale(${glyphScale}) translate(-50 -50)">${accessoryGlyphSvg(info || {})}</g>
+    </svg>`
+  );
+  return sharp(svg).png().toBuffer();
 }
 
 /** Word-wrap a function label into at most `maxLines` lines of `maxCharsPerLine` characters. */

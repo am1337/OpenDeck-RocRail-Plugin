@@ -7,8 +7,12 @@
 
 import WebSocket from 'ws';
 import {
+  CONTROLLABLE_ACCESSORY_KINDS,
   RocrailClient,
+  accessoryThemeIconFile,
+  ingestAccessoryXmlIntoCache,
   ingestLcFnXmlIntoCaches,
+  lookupAccessoryEntry,
   lookupLocoFnCacheSlice,
   mergeLcOrFnAttrsIntoLocoProps,
   overlayCachedLcFnOntoLocoProps,
@@ -24,6 +28,7 @@ import {
   getCachedFunctionIconPng,
   getFnKeyOffBackgroundDataUri,
   getFnKeyOnBackgroundDataUri,
+  renderAccessoryTilePng,
   renderFunctionLabelPng,
   renderThrottleSpeedDirPng,
   sourceContentHash,
@@ -39,6 +44,7 @@ const PLUGIN_DEBUG =
   process.env.ROCRAIL_PLUGIN_DEBUG === '1' || process.env.ROCRAIL_PLUGIN_DEBUG === 'true';
 
 const OLED_ACTION = `${PLUGIN_UUID}.oled`;
+const ACCESSORY_ACTION = `${PLUGIN_UUID}.accessory`;
 
 const OLED_THROTTLE_VIEW_FN = 'function';
 const OLED_THROTTLE_VIEW_LOCO = 'loco';
@@ -272,6 +278,16 @@ class RocrailPlugin {
     /** OLED action-instance settings (keys: OLED context id from OpenDeck / Stream Deck PI). */
     /** @type {Map<string, { throttleView?: string }>} */
     this.oledSettingsByContext = new Map();
+    /** Accessory action instances: context -> { device, itemId, itemType } */
+    /** @type {Map<string, { device: string, itemId?: string, itemType?: string }>} */
+    this.accessoryContexts = new Map();
+    /** Track-diagram element states keyed `kind|id` (filled from plan + live pushes). */
+    /** @type {Map<string, { kind: string, id: string, attrs: Record<string,string> }>} */
+    this.accessoryStateCache = new Map();
+    /** @type {Map<string, Buffer|null>} fetched theme icon bytes per file name (null = miss) */
+    this._accessoryIconByFile = new Map();
+    /** @type {Map<string, string>} rendered accessory tiles keyed by full state signature */
+    this._accessoryTileCache = new Map();
     /** @type {Map<string, Record<string, any>>} per-loco `f*` booleans/rawAttrs stitched from lcprops, lclist, and `<lc>/<fn>` pushes */
     this.perLocoFnCacheById = new Map();
   }
@@ -360,6 +376,7 @@ class RocrailPlugin {
     const d = this._deviceId(deviceId);
     let n = 0;
     for (const [, v] of this.oledContexts) if (v.device === d) n++;
+    for (const [, v] of this.accessoryContexts) if (v.device === d) n++;
     for (const [, v] of this.simpleContexts) if (v.device === d) n++;
     if (this.dialContextByDevice.has(d)) n++;
     if (this.scrollDialContextByDevice.has(d)) n++;
@@ -417,6 +434,7 @@ class RocrailPlugin {
   _allDeviceIds() {
     const ids = new Set();
     for (const [, v] of this.oledContexts) ids.add(v.device);
+    for (const [, v] of this.accessoryContexts) ids.add(v.device);
     for (const [, v] of this.simpleContexts) ids.add(v.device);
     for (const dev of this.dialContextByDevice.keys()) ids.add(dev);
     for (const dev of this.scrollDialContextByDevice.keys()) ids.add(dev);
@@ -544,6 +562,8 @@ class RocrailPlugin {
       this._locoImageCache.clear();
       this._fnIconSourceByUrl.clear();
       this._fnIconCache.clear();
+      this._accessoryIconByFile.clear();
+      this._accessoryTileCache.clear();
       await this.initRocrail();
       return;
     }
@@ -556,6 +576,11 @@ class RocrailPlugin {
           this._mergeOledActionSettings(context, rawInst);
           await this.refreshDevice(deviceId);
         }
+      } else if (action === ACCESSORY_ACTION && context != null && payload != null && typeof payload === 'object') {
+        const rawInst =
+          payload.settings != null && typeof payload.settings === 'object' ? payload.settings : payload;
+        this._mergeAccessorySettings(context, deviceId, rawInst);
+        await this.refreshAccessoryContext(context);
       }
       return;
     }
@@ -574,6 +599,11 @@ class RocrailPlugin {
         if (payload?.settings != null && typeof payload.settings === 'object') {
           this._mergeOledActionSettings(context, payload.settings);
         }
+      } else if (action === ACCESSORY_ACTION) {
+        this._mergeAccessorySettings(context, deviceId, payload?.settings);
+        await this.initRocrail(false);
+        await this.refreshAccessoryContext(context);
+        return;
       } else if (action === `${PLUGIN_UUID}.dirfwd`) {
         this.simpleContexts.set(context, { type: 'dirfwd', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.dirrev`) {
@@ -604,6 +634,8 @@ class RocrailPlugin {
       if (action === OLED_ACTION) {
         this.oledContexts.delete(context);
         this.oledSettingsByContext.delete(context);
+      } else if (action === ACCESSORY_ACTION) {
+        this.accessoryContexts.delete(context);
       } else if (action === `${PLUGIN_UUID}.dirfwd` || action === `${PLUGIN_UUID}.dirrev`) {
         this.simpleContexts.delete(context);
       } else if (action === `${PLUGIN_UUID}.stoploco` || action === `${PLUGIN_UUID}.speedplus` || action === `${PLUGIN_UUID}.speedminus`) {
@@ -625,7 +657,9 @@ class RocrailPlugin {
 
     if (evNorm === 'keydown') {
       if (PLUGIN_DEBUG) this.log(`button press action=${action} context=${context}`);
-      if (this.isOledInstance(context, action)) {
+      if (action === ACCESSORY_ACTION || this.accessoryContexts.has(context)) {
+        await this.onAccessoryPress(context, deviceId);
+      } else if (this.isOledInstance(context, action)) {
         await this.onOledPress(context, coordinates, deviceId);
       } else if (action === `${PLUGIN_UUID}.dirfwd`) {
         await this.onDirection(true, deviceId);
@@ -695,7 +729,9 @@ class RocrailPlugin {
       evNorm === 'touchpress'
     ) {
       if (PLUGIN_DEBUG) this.log(`dial/touch press action=${action} context=${context} device=${deviceId}`);
-      if (action === `${PLUGIN_UUID}.speed`) {
+      if (action === ACCESSORY_ACTION || this.accessoryContexts.has(context)) {
+        await this.onAccessoryPress(context, deviceId);
+      } else if (action === `${PLUGIN_UUID}.speed`) {
         const st = this.getDeviceState(deviceId);
         if (st.view === View.THROTTLE) await this.onSpeedStop(deviceId);
         else await this.onScroll(-1, deviceId);
@@ -1042,6 +1078,124 @@ class RocrailPlugin {
     await this.refreshScrollForDevice(deviceId);
   }
 
+  /* ---------------------------- Accessory keys ---------------------------- */
+
+  _mergeAccessorySettings(context, deviceId, settings) {
+    if (context == null) return;
+    const prev = this.accessoryContexts.get(context) || { device: this._deviceId(deviceId) };
+    prev.device = this._deviceId(deviceId) || prev.device;
+    if (settings && typeof settings === 'object') {
+      if (Object.prototype.hasOwnProperty.call(settings, 'itemId')) {
+        prev.itemId = String(settings.itemId ?? '').trim();
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, 'itemType')) {
+        prev.itemType = String(settings.itemType ?? 'auto').trim().toLowerCase() || 'auto';
+      }
+    }
+    this.accessoryContexts.set(context, prev);
+  }
+
+  /** Press: flip turnout/signal/output (turntable: next track). Status-only kinds are ignored. */
+  async onAccessoryPress(context, _deviceId) {
+    await this.initRocrail(false);
+    const cfg = this.accessoryContexts.get(context);
+    const itemId = (cfg?.itemId || '').trim();
+    if (!itemId) {
+      this.log('accessory press ignored: no item id configured');
+      return;
+    }
+    const entry = lookupAccessoryEntry(this.accessoryStateCache, itemId, cfg?.itemType || 'auto');
+    const kind = entry?.kind || (cfg?.itemType !== 'auto' ? cfg?.itemType : null);
+    if (!kind || !CONTROLLABLE_ACCESSORY_KINDS.includes(kind)) {
+      this.log(`accessory press ignored: id=${itemId} kind=${kind || 'unknown'} is status-only or unknown`);
+      return;
+    }
+    const realId = entry?.attrs?.id || itemId;
+    try {
+      this.log(`accessory cmd kind=${kind} id=${realId}`);
+      await this.rocrail.commandAccessory(kind, realId);
+      // No optimistic update: Rocrail broadcasts the new state, which refreshes the tile.
+    } catch (e) {
+      this.log(`accessory cmd failed kind=${kind} id=${realId}: ${e?.message || String(e)}`);
+    }
+  }
+
+  /** Fetch a Rocrail SVG-theme icon (e.g. /svg/themes/SpDrS60/turnoutleft-t.svg); misses cached as null. */
+  async _loadAccessoryIconBuffer(fileName) {
+    const basePath = (this.globalSettings.accessorySvgBasePath ?? '').trim();
+    if (!basePath || !fileName) return null;
+    if (this._accessoryIconByFile.has(fileName)) return this._accessoryIconByFile.get(fileName);
+    let buf = null;
+    const url = this._buildHttpFileUrl(fileName, basePath);
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      if (res.ok) {
+        buf = Buffer.from(await res.arrayBuffer());
+        if (PLUGIN_DEBUG) this.log(`accessory icon fetched file=${fileName} bytes=${buf.length}`);
+      } else {
+        this.log(`accessory icon fetch failed status=${res.status} file=${fileName}`);
+      }
+    } catch (e) {
+      this.log(`accessory icon fetch error file=${fileName}: ${e?.message || String(e)}`);
+    }
+    this._accessoryIconByFile.set(fileName, buf);
+    return buf;
+  }
+
+  async refreshAccessoryContext(context) {
+    const cfg = this.accessoryContexts.get(context);
+    if (!cfg) return;
+    const itemId = (cfg.itemId || '').trim();
+    const fontPx = this._effectiveOledTextFontPx();
+
+    let info;
+    let iconFile = null;
+    if (!itemId) {
+      info = { kind: '', name: 'Accessory' };
+    } else {
+      const entry = lookupAccessoryEntry(this.accessoryStateCache, itemId, cfg.itemType || 'auto');
+      if (!entry) {
+        info = { kind: cfg.itemType !== 'auto' ? cfg.itemType : '', name: itemId };
+      } else {
+        info = {
+          kind: entry.kind,
+          type: entry.attrs.type,
+          state: entry.attrs.state,
+          locid: entry.attrs.locid,
+          bridgepos: entry.attrs.bridgepos,
+          ori: entry.attrs.ori || entry.attrs.direction || 'east',
+          name: entry.attrs.id || itemId,
+        };
+        iconFile = accessoryThemeIconFile(entry);
+      }
+    }
+
+    const sig = `${info.kind}|${info.type ?? ''}|${info.state ?? ''}|${info.locid ?? ''}|${info.bridgepos ?? ''}|${info.ori ?? 'east'}|${info.name}|${iconFile ?? ''}|${fontPx ?? 'auto'}`;
+    let dataUri = this._accessoryTileCache.get(sig);
+    if (!dataUri) {
+      try {
+        const iconBuffer = iconFile ? await this._loadAccessoryIconBuffer(iconFile) : null;
+        const png = await renderAccessoryTilePng({ ...info, iconBuffer }, undefined, fontPx);
+        dataUri = `data:image/png;base64,${png.toString('base64')}`;
+        this._accessoryTileCache.set(sig, dataUri);
+      } catch (e) {
+        this.log(`accessory tile render failed id=${itemId}: ${e?.message || String(e)}`);
+        this.setImage(context, null);
+        this.setTitle(context, itemId || 'Accessory');
+        return;
+      }
+    }
+    this.setImage(context, dataUri);
+    this.setTitle(context, '');
+    this.setState(context, 0);
+  }
+
+  async refreshAllAccessoryContexts() {
+    for (const ctx of this.accessoryContexts.keys()) {
+      await this.refreshAccessoryContext(ctx);
+    }
+  }
+
   /**
    * When loco locks change (e.g. back on one deck), other decks' list rows may need refresh
    * (busy vs selectable). Cheap: refresh LOCO_LIST on all devices.
@@ -1055,9 +1209,26 @@ class RocrailPlugin {
     }
   }
 
-  /** Rocrail TCP push (`<lc/>`, `<fn/>`, …): keep per‑loco function cache updated; throttle OLED refresh when driven loco changes. */
+  /** Rocrail TCP push (`<lc/>`, `<fn/>`, `<sw/>`, …): update fn + accessory caches; refresh affected tiles. */
   _onRocrailPush(body, _name) {
     ingestLcFnXmlIntoCaches(this.perLocoFnCacheById, body);
+
+    // Track-diagram elements: plan reply seeds the cache, live pushes update it.
+    const changedAcc = ingestAccessoryXmlIntoCache(this.accessoryStateCache, body);
+    if (changedAcc.length > 0 && this.accessoryContexts.size > 0) {
+      const changedSet = new Set(changedAcc);
+      for (const [ctx, cfg] of this.accessoryContexts) {
+        const itemId = (cfg.itemId || '').trim();
+        if (!itemId) continue;
+        const entry = lookupAccessoryEntry(this.accessoryStateCache, itemId, cfg.itemType || 'auto');
+        if (entry && changedSet.has(`${entry.kind}|${String(entry.attrs.id ?? entry.id).toLowerCase()}`)) {
+          void this.refreshAccessoryContext(ctx).catch((e) =>
+            this.log(`accessory refresh after push failed: ${e?.message || String(e)}`)
+          );
+        }
+      }
+    }
+
     let touchedThrottle = false;
     for (const deviceId of this._allDeviceIds()) {
       const st = this.getDeviceState(deviceId);
@@ -1245,6 +1416,7 @@ class RocrailPlugin {
     for (const dev of this._allDeviceIds()) {
       await this.refreshDevice(dev);
     }
+    await this.refreshAllAccessoryContexts();
   }
 
   async refreshDevice(deviceId) {

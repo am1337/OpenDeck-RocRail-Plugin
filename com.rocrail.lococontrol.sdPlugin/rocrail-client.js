@@ -230,6 +230,141 @@ export function syncLocoFnCacheFromLocoProps(cacheMap, locoProps) {
   }
 }
 
+/* ------------------------------------------------------------------------ *
+ * Accessories (track diagram elements): turnouts (sw), signals (sg),
+ * outputs/buttons (co), sensors (fb), blocks (bk), tracks (tk), turntables (tt)
+ * ------------------------------------------------------------------------ */
+
+/** XML tags of track-diagram elements mirrored into the accessory state cache. */
+export const ACCESSORY_KINDS = ['sw', 'sg', 'co', 'fb', 'bk', 'tk', 'tt'];
+
+/** Accessory kinds that accept a command on key press (others are status-only). */
+export const CONTROLLABLE_ACCESSORY_KINDS = ['sw', 'sg', 'co', 'tt'];
+
+export function accessoryCacheKey(kind, id) {
+  return `${kind}|${String(id).toLowerCase()}`;
+}
+
+/**
+ * Clockwise rotation (degrees) for plan element orientation. Default layout is **east** (0°).
+ * north/nord = 90° CW, west = 180°, south/süd = 270° CW.
+ */
+export function accessoryOriRotationCw(ori) {
+  const s = String(ori ?? 'east')
+    .trim()
+    .toLowerCase()
+    .replace(/ü/g, 'u');
+  const map = {
+    east: 0,
+    ost: 0,
+    north: 90,
+    nord: 90,
+    west: 180,
+    south: 270,
+    sud: 270,
+  };
+  return map[s] ?? 0;
+}
+
+/**
+ * Merge every `<sw/> <sg/> <co/> <fb/> <bk/> <tk/> <tt/>` snippet from any Rocrail
+ * XML body (plan reply, list replies, unsolicited pushes) into the accessory cache.
+ * @param {Map<string, {kind: string, id: string, attrs: Record<string,string>}>} cacheMap
+ * @returns {string[]} cache keys whose attributes changed
+ */
+export function ingestAccessoryXmlIntoCache(cacheMap, bodyXml) {
+  if (!cacheMap || typeof bodyXml !== 'string' || !bodyXml) return [];
+  const changed = [];
+  for (const kind of ACCESSORY_KINDS) {
+    const re = new RegExp(`<${kind}\\s+([^>]+?)/?>`, 'gi');
+    let m;
+    while ((m = re.exec(bodyXml)) !== null) {
+      const a = parseAttrs(m[1]);
+      if (!a?.id) continue;
+      const key = accessoryCacheKey(kind, a.id);
+      const prev = cacheMap.get(key);
+      const entry = prev || { kind, id: a.id, attrs: {} };
+      let any = !prev;
+      for (const [k, v] of Object.entries(a)) {
+        if (entry.attrs[k] !== v) {
+          entry.attrs[k] = v;
+          any = true;
+        }
+      }
+      if (!prev) cacheMap.set(key, entry);
+      if (any && !changed.includes(key)) changed.push(key);
+    }
+  }
+  return changed;
+}
+
+/**
+ * Find a cached accessory by id (case-insensitive). `kind` restricts to one element
+ * type; 'auto' scans all kinds in controllable-first order.
+ */
+export function lookupAccessoryEntry(cacheMap, itemId, kind = 'auto') {
+  if (!cacheMap || !itemId) return undefined;
+  const kinds = kind && kind !== 'auto' ? [kind] : ACCESSORY_KINDS;
+  const idLower = String(itemId).toLowerCase();
+  for (const k of kinds) {
+    const direct = cacheMap.get(`${k}|${idLower}`);
+    if (direct) return direct;
+  }
+  return undefined;
+}
+
+/**
+ * Rocrail SVG theme file (e.g. SpDrS60) visualising this accessory's current state.
+ * Naming follows the official themes: `turnoutleft[-t].svg`, `threeway[-tl|-tr].svg`,
+ * `signalmain-r.svg`, `button-0-on.svg`, `sensor-on.svg`, `block-occ.svg`, `straight.svg`, …
+ * @returns {string | null} file name, or null when no static theme file exists (e.g. turntable)
+ */
+export function accessoryThemeIconFile(entry) {
+  if (!entry) return null;
+  const a = entry.attrs || {};
+  const state = String(a.state ?? '').toLowerCase();
+  if (entry.kind === 'sw') {
+    const t = String(a.type ?? 'left').toLowerCase();
+    if (t === 'decoupler') return `decoupler${state === 'on' ? '-on' : ''}.svg`;
+    if (t === 'threeway') {
+      return `threeway${state === 'left' ? '-tl' : state === 'right' ? '-tr' : ''}.svg`;
+    }
+    if (t === 'dcrossing') {
+      const suffix = state === 'left' ? '-tl' : state === 'right' ? '-tr' : state === 'turnout' ? '-t' : '';
+      return `dcrossingleft${suffix}.svg`;
+    }
+    if (t === 'crossing' || t === 'ccrossing') return `${t}.svg`;
+    const base = t === 'right' ? 'turnoutright' : 'turnoutleft';
+    return `${base}${state === 'turnout' ? '-t' : ''}.svg`;
+  }
+  if (entry.kind === 'sg') {
+    const semaphore = String(a.type ?? '').toLowerCase() === 'semaphore';
+    const sgKind = String(a.signal ?? '').toLowerCase();
+    const base =
+      (semaphore ? 'semaphore' : 'signal') +
+      (sgKind === 'distant' ? 'distant' : sgKind === 'shunting' ? 'shunting' : 'main');
+    const aspect =
+      state === 'green' ? '-g' : state === 'yellow' ? '-y' : state === 'white' ? '-w' : state === 'blank' ? '-b' : '-r';
+    return `${base}${aspect}.svg`;
+  }
+  // Outputs/buttons: built-in tile uses red (off) / green (on); SpDrS60 theme SVGs are yellow.
+  if (entry.kind === 'co') return null;
+  if (entry.kind === 'fb') return `sensor-${state === 'true' ? 'on' : 'off'}.svg`;
+  if (entry.kind === 'bk') {
+    const locid = String(a.locid ?? '').trim();
+    if (locid) return state.startsWith('res') ? 'block-res.svg' : 'block-occ.svg';
+    if (state === 'closed') return 'block-closed.svg';
+    if (state === 'ghost') return 'block-ghost.svg';
+    return 'block.svg';
+  }
+  if (entry.kind === 'tk') {
+    const t = String(a.type ?? 'straight').toLowerCase();
+    if (['curve', 'buffer', 'dir', 'dirall', 'connector'].includes(t)) return `${t}.svg`;
+    return 'straight.svg';
+  }
+  return null;
+}
+
 function escapeXmlAttr(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -836,6 +971,24 @@ export class RocrailClient {
 
   async stopLoco(locoId) {
     await this.setVelocity(locoId, 0);
+  }
+
+  /**
+   * Send the press command for a track-diagram accessory:
+   * turnouts / signals / outputs flip, turntables step to the next track.
+   * @param {'sw'|'sg'|'co'|'tt'} kind
+   */
+  async commandAccessory(kind, itemId) {
+    const id = escapeXmlAttr(itemId);
+    if (kind === 'tt') {
+      await this._send('tt', `<tt id="${id}" cmd="next"/>`, { expectResponse: false });
+      return;
+    }
+    if (kind === 'sw' || kind === 'sg' || kind === 'co') {
+      await this._send(kind, `<${kind} id="${id}" cmd="flip"/>`, { expectResponse: false });
+      return;
+    }
+    throw new Error(`accessory kind ${kind} is not controllable`);
   }
 
   formatSpeed(loco) {
