@@ -877,10 +877,15 @@ class RocrailPlugin {
           await this.onDirection(!(st.locoProps.dir === true), deviceId);
         } else if (tv === OLED_THROTTLE_VIEW_SPEED_ONLY) {
           if (moving) await this.onSpeedStop(deviceId);
-        } else if (moving) {
-          await this.onSpeedStop(deviceId);
         } else {
-          await this.onDirection(!(st.locoProps.dir === true), deviceId);
+          // Speed & direction: while moving, stop and toggle direction in one press
+          if (moving) {
+            const newDir = !(st.locoProps.dir === true);
+            await this.onSpeedStop(deviceId);
+            await this.onDirection(newDir, deviceId);
+          } else {
+            await this.onDirection(!(st.locoProps.dir === true), deviceId);
+          }
         }
         return;
       }
