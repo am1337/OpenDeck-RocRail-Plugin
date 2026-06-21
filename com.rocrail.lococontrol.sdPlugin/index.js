@@ -272,6 +272,8 @@ class RocrailPlugin {
 
     /** Serialize initRocrail / getLocoList so parallel willAppear from multiple decks cannot mix TCP replies. */
     this._initRocrailChain = Promise.resolve();
+    /** True after the first successful `lclist` + `plan` fetch for the current Rocrail endpoint. */
+    this._rocrailCatalogLoaded = false;
     /** @type {ReturnType<typeof setTimeout> | null} */
     this._lcPushRefreshTimer = null;
 
@@ -1234,6 +1236,7 @@ class RocrailPlugin {
       const st = this.getDeviceState(deviceId);
       if (st.view !== View.THROTTLE || !st.selectedLoco?.id || !st.locoProps) continue;
       if (mergeLcOrFnAttrsIntoLocoProps(st.locoProps, body, st.selectedLoco.id)) {
+        syncLcThrottleIntoRawAttrs(st.locoProps);
         touchedThrottle = true;
         syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
       }
@@ -1245,8 +1248,8 @@ class RocrailPlugin {
       for (const deviceId of this._allDeviceIds()) {
         const st = this.getDeviceState(deviceId);
         if (st.view === View.THROTTLE && st.selectedLoco) {
-          void this.refreshOledsForDevice(deviceId).catch((e) =>
-            this.log(`refreshOleds after Rocrail push: ${e?.message || String(e)}`)
+          void this.refreshDevice(deviceId).catch((e) =>
+            this.log(`refresh after Rocrail push: ${e?.message || String(e)}`)
           );
         }
       }
@@ -1266,6 +1269,7 @@ class RocrailPlugin {
       this.log(`rocrail endpoint changed, reconnecting ${this.rocrail.host}:${this.rocrail.port} -> ${host}:${port}`);
       this.rocrail.disconnect();
       this.rocrail = null;
+      this._rocrailCatalogLoaded = false;
     }
     if (!this.rocrail) {
       this.rocrail = new RocrailClient(host, port, {
@@ -1282,17 +1286,21 @@ class RocrailPlugin {
         void this._onRocrailPush(body, name);
       };
     }
+    const shouldLoadCatalog = refreshAll || !this._rocrailCatalogLoaded;
     try {
-      if (this.rocrail?.socket?.writable) {
+      if (shouldLoadCatalog && this.rocrail?.socket?.writable) {
         const allLocos = await this.rocrail.getLocoList(this.perLocoFnCacheById);
         this.locos = this._filterDisplayedLocos(allLocos);
+        this._rocrailCatalogLoaded = true;
         this.log(`loaded locos count=${this.locos.length} (of ${allLocos.length}) filter=${this.globalSettings.displayedLocos || 'all'}`);
-      } else {
+      } else if (!shouldLoadCatalog && PLUGIN_DEBUG) {
+        this.log('getLocoList skipped: catalog already loaded');
+      } else if (!this.rocrail?.socket?.writable) {
         this.log('getLocoList skipped: Rocrail socket not connected yet');
       }
     } catch (e) {
       this.log(`getLocoList failed: ${e?.message || String(e)}`);
-      this.locos = [];
+      if (shouldLoadCatalog) this.locos = [];
     }
     if (refreshAll) await this.refreshAllDevices();
   }

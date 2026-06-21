@@ -105,9 +105,44 @@ function mergeFnAttrsFromAttrMap(locoProps, attrs) {
   return updated;
 }
 
+/** Merge live throttle fields (`V`, `V_realkmh`, `dir`) from a Rocrail `<lc/>` / `<fn/>` attribute map. */
+function mergeLcMotionAttrsFromAttrMap(locoProps, attrs) {
+  if (!locoProps || !attrs || typeof attrs !== 'object') return false;
+  let updated = false;
+  if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
+
+  if (Object.prototype.hasOwnProperty.call(attrs, 'V')) {
+    const v = Math.max(0, Math.min(100, parseInt(String(attrs.V), 10) || 0));
+    if (locoProps.V !== v) updated = true;
+    locoProps.V = v;
+    locoProps.rawAttrs.V = String(v);
+  }
+  if (Object.prototype.hasOwnProperty.call(attrs, 'V_realkmh')) {
+    const rk = parseInt(String(attrs.V_realkmh), 10) || 0;
+    if (locoProps.V_realkmh !== rk) updated = true;
+    locoProps.V_realkmh = rk;
+    locoProps.rawAttrs.V_realkmh = String(rk);
+  }
+  if (Object.prototype.hasOwnProperty.call(attrs, 'dir')) {
+    const d = rocrailAttrBool(attrs.dir);
+    if (locoProps.dir !== d) updated = true;
+    locoProps.dir = d;
+    locoProps.rawAttrs.dir = d ? 'true' : 'false';
+  }
+  return updated;
+}
+
+/** Apply function bits and throttle motion fields from one Rocrail attribute map. */
+function mergeLcOrFnAttrsFromAttrMap(locoProps, attrs) {
+  let any = false;
+  if (mergeFnAttrsFromAttrMap(locoProps, attrs)) any = true;
+  if (mergeLcMotionAttrsFromAttrMap(locoProps, attrs)) any = true;
+  return any;
+}
+
 /**
  * Merge live `<lc/>` / `<fn/>` snippets from Rocrail broadcasts into the selected loco's props.
- * @returns {boolean} true if any `f0`…`f32` value changed for `locoId`
+ * @returns {boolean} true if any function bit or throttle field changed for `locoId`
  */
 function idsMatchRocrailLc(aId, locoId) {
   if (aId == null || locoId == null) return false;
@@ -124,13 +159,13 @@ export function mergeLcOrFnAttrsIntoLocoProps(locoProps, bodyXml, locoId) {
   while ((m = lcRe.exec(bodyXml)) !== null) {
     const a = parseAttrs(m[1]);
     if (!idsMatchRocrailLc(a.id, locoId)) continue;
-    if (mergeFnAttrsFromAttrMap(locoProps, a)) any = true;
+    if (mergeLcOrFnAttrsFromAttrMap(locoProps, a)) any = true;
   }
   const fnRe = /<fn\s+([^>]+)\/?>/gi;
   while ((m = fnRe.exec(bodyXml)) !== null) {
     const a = parseAttrs(m[1]);
     if (!idsMatchRocrailLc(a.id, locoId)) continue;
-    if (mergeFnAttrsFromAttrMap(locoProps, a)) any = true;
+    if (mergeLcOrFnAttrsFromAttrMap(locoProps, a)) any = true;
   }
   return any;
 }
@@ -176,7 +211,7 @@ export function ingestLcFnXmlIntoCaches(cacheMap, bodyXml) {
     if (!a?.id) continue;
     const slot = getOrCreateFnCacheSlot(cacheMap, a.id);
     if (!slot) continue;
-    mergeFnAttrsFromAttrMap(slot, a);
+    mergeLcOrFnAttrsFromAttrMap(slot, a);
   }
   const fnRe = /<fn\s+([^>]+)\/?>/gi;
   while ((m = fnRe.exec(bodyXml)) !== null) {
@@ -184,7 +219,7 @@ export function ingestLcFnXmlIntoCaches(cacheMap, bodyXml) {
     if (!a?.id) continue;
     const slot = getOrCreateFnCacheSlot(cacheMap, a.id);
     if (!slot) continue;
-    mergeFnAttrsFromAttrMap(slot, a);
+    mergeLcOrFnAttrsFromAttrMap(slot, a);
   }
 }
 
@@ -207,6 +242,18 @@ export function overlayCachedLcFnOntoLocoProps(locoProps, cached) {
       locoProps.rawAttrs[kl] = locoProps[kl] ? 'true' : 'false';
     }
   }
+  if (Object.prototype.hasOwnProperty.call(cached, 'V')) {
+    locoProps.V = cached.V;
+    if (ra?.V != null) locoProps.rawAttrs.V = String(ra.V);
+  }
+  if (Object.prototype.hasOwnProperty.call(cached, 'V_realkmh')) {
+    locoProps.V_realkmh = cached.V_realkmh;
+    if (ra?.V_realkmh != null) locoProps.rawAttrs.V_realkmh = String(ra.V_realkmh);
+  }
+  if (Object.prototype.hasOwnProperty.call(cached, 'dir')) {
+    locoProps.dir = !!cached.dir;
+    if (ra?.dir != null) locoProps.rawAttrs.dir = String(ra.dir);
+  }
 }
 
 /**
@@ -227,6 +274,18 @@ export function syncLocoFnCacheFromLocoProps(cacheMap, locoProps) {
     } else {
       slot.rawAttrs[kl] = locoProps[kl] ? 'true' : 'false';
     }
+  }
+  if (locoProps.V != null) {
+    slot.V = locoProps.V;
+    slot.rawAttrs.V = String(locoProps.rawAttrs?.V ?? locoProps.V);
+  }
+  if (locoProps.V_realkmh != null) {
+    slot.V_realkmh = locoProps.V_realkmh;
+    slot.rawAttrs.V_realkmh = String(locoProps.rawAttrs?.V_realkmh ?? locoProps.V_realkmh);
+  }
+  if (locoProps.dir != null) {
+    slot.dir = !!locoProps.dir;
+    slot.rawAttrs.dir = String(locoProps.rawAttrs?.dir ?? (locoProps.dir ? 'true' : 'false'));
   }
 }
 
