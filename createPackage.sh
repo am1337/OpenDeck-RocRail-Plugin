@@ -1,1 +1,1 @@
-rm com.rocrail.lococontrol.streamDeckPlugin && zip -r com.rocrail.lococontrol.streamDeckPlugin com.rocrail.lococontrol.sdPlugin
+rm -f com.marikar.rocrailcontrol.streamDeckPlugin && zip -r com.marikar.rocrailcontrol.streamDeckPlugin com.marikar.rocrailcontrol.sdPlugin

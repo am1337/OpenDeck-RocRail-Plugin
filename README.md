@@ -28,15 +28,15 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 
 1. Install dependencies:
    ```bash
-   cd com.rocrail.lococontrol.sdPlugin
+   cd com.marikar.rocrailcontrol.sdPlugin
    npm install
    ```
 2. Create archive
-   zip -r com.rocrail.lococontrol.streamDeckPlugin com.rocrail.lococontrol.sdPlugin
+   zip -r com.marikar.rocrailcontrol.streamDeckPlugin com.marikar.rocrailcontrol.sdPlugin
 
 ## Installation
 
-1. Build or download `com.rocrail.lococontrol.streamDeckPlugin` from github
+1. Build or download `com.marikar.rocrailcontrol.streamDeckPlugin` from github
 
 2. On OpenDeck go to `Plugins` choose `Install from file` and select the built or downloaded file.
 
