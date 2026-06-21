@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="72" height="72">
+  <rect width="72" height="72" rx="8" fill="#2d2d44"/>
+  <!-- Turnout with signal: track-diagram accessory -->
+  <path d="M8 46 H36 M36 46 H64 M36 46 L58 26" stroke="#4ecdc4" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="18" cy="22" r="8" fill="#e74c3c" stroke="#4ecdc4" stroke-width="2.5"/>
+</svg>

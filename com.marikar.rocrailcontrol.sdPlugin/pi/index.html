@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rocrail Loco Control</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 12px; margin: 0; font-size: 12px; }
+    label { display: block; margin-top: 8px; font-weight: 500; }
+    input, select { width: 100%; padding: 6px; margin-top: 2px; box-sizing: border-box; }
+    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #333; }
+    .section:last-child { border-bottom: none; }
+    small.hint { color: #aaa; font-weight: normal; display: block; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Rocrail server connection</h3>
+    <small class="hint">Use the TCP control port (RCP, default <strong>8051</strong>) – the same endpoint Rocview/OpenDecoder clients use.</small>
+    <label>Rocrail TCP host</label>
+    <input type="text" id="host" placeholder="127.0.0.1">
+    <label>Rocrail TCP port</label>
+    <input type="number" id="port" placeholder="8051">
+  </div>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Loco list &amp; scroll (global)</h3>
+    <label>OLED composite / labelled text font size (px)</label>
+    <input type="number" id="oledTextFontSize" min="8" max="48" placeholder="empty = automatic">
+    <label>Displayed locos</label>
+    <select id="displayedLocos">
+      <option value="all">All locos</option>
+      <option value="noauto">No locos in auto mode</option>
+      <option value="noautohalf">No locos in auto or half-auto mode</option>
+    </select>
+    <label>Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder</label>
+    <select id="locoListDialScroll">
+      <option value="page">One page per step (same count as visible OLED buttons)</option>
+      <option value="single">One unit per step</option>
+    </select>
+  </div>
+  <div id="accessoryInstanceSection" class="section" style="display: none;">
+    <h3 style="margin: 0 0 8px 0;">This Accessory key</h3>
+    <small class="hint">Controls or displays one track-diagram element of the Rocrail plan, independent of loco selection. Turnouts, signals and outputs/buttons flip on press; turntables step to the next track; sensors, blocks and tracks are status-only.</small>
+    <label>Item ID (as in the Rocrail plan)</label>
+    <input type="text" id="accItemId" placeholder="e.g. sw1, sg2, co3, fb4, bk01">
+    <label>Item type</label>
+    <select id="accItemType">
+      <option value="auto">Auto-detect (search the plan by ID)</option>
+      <option value="sw">Turnout / crossing / three-way / decoupler (sw)</option>
+      <option value="sg">Signal (sg)</option>
+      <option value="co">Output / button (co)</option>
+      <option value="tt">Turntable (tt)</option>
+      <option value="fb">Sensor (fb, status only)</option>
+      <option value="bk">Block (bk, status only)</option>
+      <option value="tk">Track (tk, status only)</option>
+    </select>
+  </div>
+  <div id="oledInstanceSection" class="section" style="display: none;">
+    <h3 style="margin: 0 0 8px 0;">This OLED key (Throttle / Loco-control view)</h3>
+    <small class="hint">Rocview throttle view modes: applies only while controlling a locomotive. Each OLED key may show functions, loco portrait, or speed/direction independently.</small>
+    <label>Throttle OLED mode</label>
+    <select id="throttleView">
+      <option value="function">Functions (unchanged legacy behaviour)</option>
+      <option value="loco">Loco portrait (name &amp; image like list view)</option>
+      <option value="speed">Speed &amp; direction</option>
+      <option value="speedonly">Speed only</option>
+      <option value="directiononly">Direction only</option>
+    </select>
+  </div>
+  <div class="section">
+    <h3 style="margin: 0 0 8px 0;">Loco images &amp; function icons via HTTP</h3>
+    <small class="hint">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.</small>
+    <label style="margin-top:8px;">HTTP port (loco images &amp; icons)</label>
+    <input type="number" id="httpPort" placeholder="8080">
+    <label>HTTP base path for loco images (use / for root: http://host:port/&lt;filename&gt;)</label>
+    <input type="text" id="httpBasePath" placeholder="/">
+    <label>HTTP base path for function icons (empty = use loco image base path)</label>
+    <input type="text" id="httpIconBasePath" placeholder="empty = same as images">
+    <label>HTTP base path for accessory SVG theme (empty = built-in symbols)</label>
+    <input type="text" id="accessorySvgBasePath" placeholder="/svg/themes/SpDrS60">
+  </div>
+  <script>
+    const PLUGIN_OLED_UUID = 'com.marikar.rocrailcontrol.oled';
+    const PLUGIN_ACCESSORY_UUID = 'com.marikar.rocrailcontrol.accessory';
+    let ws, inspectorSocketUuid, actionInstanceUuid, activeActionUuid;
+
+    function dialScrollFromSaved(v) {
+      return v === 'single' ? 'single' : 'page';
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+      inspectorSocketUuid = inUUID;
+      const ai = inActionInfo ? JSON.parse(inActionInfo) : {};
+      activeActionUuid = ai.action || '';
+      actionInstanceUuid = ai.context || '';
+
+      ws = new WebSocket('ws://127.0.0.1:' + inPort);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ event: inRegisterEvent, uuid: inUUID }));
+        ws.send(JSON.stringify({ event: 'getGlobalSettings', context: inspectorSocketUuid }));
+        if (actionInstanceUuid) {
+          ws.send(JSON.stringify({ event: 'getSettings', context: actionInstanceUuid }));
+        }
+        updatePerActionVisibility();
+      };
+      ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.event === 'didReceiveGlobalSettings') {
+          const s = msg.payload?.settings || {};
+          document.getElementById('host').value = s.host || '127.0.0.1';
+          document.getElementById('port').value = s.port || '8051';
+          document.getElementById('oledTextFontSize').value =
+            s.oledTextFontSize != null && s.oledTextFontSize !== '' ? String(s.oledTextFontSize) : '';
+          document.getElementById('httpPort').value = s.httpPort || '8080';
+          document.getElementById('httpBasePath').value = s.httpBasePath || '/';
+          document.getElementById('httpIconBasePath').value = s.httpIconBasePath || '';
+          document.getElementById('accessorySvgBasePath').value = s.accessorySvgBasePath || '';
+          document.getElementById('displayedLocos').value = s.displayedLocos || 'all';
+          document.getElementById('locoListDialScroll').value = dialScrollFromSaved(s.locoListDialScroll);
+        }
+        if (msg.event === 'didReceiveSettings') {
+          activeActionUuid = msg.action || activeActionUuid;
+          actionInstanceUuid = msg.context || actionInstanceUuid;
+          updatePerActionVisibility();
+          if ((msg.action || '') === PLUGIN_OLED_UUID) {
+            const ls = msg.payload?.settings || {};
+            const validThrottleViews = ['loco', 'speed', 'speedonly', 'directiononly'];
+            document.getElementById('throttleView').value =
+              validThrottleViews.includes(ls.throttleView) ? ls.throttleView : 'function';
+          }
+          if ((msg.action || '') === PLUGIN_ACCESSORY_UUID) {
+            const ls = msg.payload?.settings || {};
+            document.getElementById('accItemId').value = ls.itemId || '';
+            const validKinds = ['sw', 'sg', 'co', 'tt', 'fb', 'bk', 'tk'];
+            document.getElementById('accItemType').value = validKinds.includes(ls.itemType) ? ls.itemType : 'auto';
+          }
+        }
+      };
+    }
+
+    function updatePerActionVisibility() {
+      document.getElementById('oledInstanceSection').style.display =
+        activeActionUuid === PLUGIN_OLED_UUID ? 'block' : 'none';
+      document.getElementById('accessoryInstanceSection').style.display =
+        activeActionUuid === PLUGIN_ACCESSORY_UUID ? 'block' : 'none';
+    }
+
+    function saveGlobal() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !inspectorSocketUuid) return;
+      const ofs = document.getElementById('oledTextFontSize').value.trim();
+      ws.send(JSON.stringify({
+        event: 'setGlobalSettings',
+        context: inspectorSocketUuid,
+        payload: {
+          host: document.getElementById('host').value || '127.0.0.1',
+          port: document.getElementById('port').value || '8051',
+          oledTextFontSize: ofs === '' ? '' : ofs,
+          httpPort: document.getElementById('httpPort').value || '8080',
+          httpBasePath: document.getElementById('httpBasePath').value || '/',
+          httpIconBasePath: document.getElementById('httpIconBasePath').value || '',
+          accessorySvgBasePath: document.getElementById('accessorySvgBasePath').value || '',
+          displayedLocos: document.getElementById('displayedLocos').value || 'all',
+          locoListDialScroll: document.getElementById('locoListDialScroll').value || 'page',
+        },
+      }));
+    }
+
+    function saveAccessory() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !actionInstanceUuid || activeActionUuid !== PLUGIN_ACCESSORY_UUID)
+        return;
+      ws.send(JSON.stringify({
+        event: 'setSettings',
+        context: actionInstanceUuid,
+        payload: {
+          itemId: document.getElementById('accItemId').value.trim(),
+          itemType: document.getElementById('accItemType').value || 'auto',
+        },
+      }));
+    }
+
+    function saveThrottleView() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !actionInstanceUuid || activeActionUuid !== PLUGIN_OLED_UUID)
+        return;
+      ws.send(JSON.stringify({
+        event: 'setSettings',
+        context: actionInstanceUuid,
+        payload: {
+          throttleView: document.getElementById('throttleView').value || 'function',
+        },
+      }));
+    }
+
+    document.getElementById('host').addEventListener('change', saveGlobal);
+    document.getElementById('port').addEventListener('change', saveGlobal);
+    document.getElementById('oledTextFontSize').addEventListener('change', saveGlobal);
+    document.getElementById('httpPort').addEventListener('change', saveGlobal);
+    document.getElementById('httpBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('httpIconBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('accessorySvgBasePath').addEventListener('change', saveGlobal);
+    document.getElementById('displayedLocos').addEventListener('change', saveGlobal);
+    document.getElementById('locoListDialScroll').addEventListener('change', saveGlobal);
+    document.getElementById('throttleView').addEventListener('change', saveThrottleView);
+    document.getElementById('accItemId').addEventListener('change', saveAccessory);
+    document.getElementById('accItemType').addEventListener('change', saveAccessory);
+  </script>
+</body>
+</html>
