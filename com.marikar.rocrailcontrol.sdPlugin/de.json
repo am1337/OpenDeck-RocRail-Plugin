@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "OpenDeck-Plugin zur Verbindung mit RocRail und Steuerung der Modellbahn über Stream Deck",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "Rocrail OLED-Taste",
+    "Tooltip": "OLED-Taste für Lokliste, Funktionen oder Geschwindigkeitsanzeige",
+    "States": [
+      {
+        "Name": "Funktion aus"
+      },
+      {
+        "Name": "Funktion an"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "Rocrail Zubehör",
+    "Tooltip": "Ein Gleisplanelement steuern oder anzeigen (Weiche, Signal, Ausgang/Taster, Drehscheibe; Sensoren/Blöcke/Gleise nur Status). Item-ID im Inspector konfigurieren."
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "Rocrail Richtung vorwärts",
+    "Tooltip": "Fahrtrichtung der Lok auf vorwärts setzen"
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "Rocrail Richtung rückwärts",
+    "Tooltip": "Fahrtrichtung der Lok auf rückwärts setzen"
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "Rocrail Geschwindigkeitsregler",
+    "Tooltip": "Drehregler: drehen für Geschwindigkeit, drücken zum Stoppen"
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "Rocrail Lok stoppen",
+    "Tooltip": "Setzt die Geschwindigkeit der aktuellen Lok auf null. Erfordert eine ausgewählte Lok (Bedienmodus)."
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "Rocrail Geschwindigkeit +5",
+    "Tooltip": "Erhöht die Geschwindigkeit der aktuellen Lok um fünf Schritte (% oder km/h je nach Lok). Erfordert eine ausgewählte Lok."
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "Rocrail Geschwindigkeit −5",
+    "Tooltip": "Verringert die Geschwindigkeit der aktuellen Lok um fünf Schritte (% oder km/h je nach Lok). Erfordert eine ausgewählte Lok."
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "Rocrail Listen-Scrollregler",
+    "Tooltip": "Encoder: Lokliste oder Funktionsliste im Bedienmodus scrollen; gleiche Schrittweite wie die globale OLED-/Geschwindigkeitsregler-Einstellung",
+    "States": [
+      {
+        "Name": "Loks"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "Rocrail Zurück",
+    "Tooltip": "Zur Lokliste zurückkehren (stoppt die aktuelle Lok)"
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "Rocrail Nach oben scrollen",
+    "Tooltip": "In der Lok- oder Funktionsliste nach oben scrollen"
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "Rocrail Nach unten scrollen",
+    "Tooltip": "In der Lok- oder Funktionsliste nach unten scrollen"
+  },
+  "Localization": {
+    "pi.title": "Rocrail Loksteuerung",
+    "pi.section.connection": "Rocrail-Serververbindung",
+    "pi.hint.connection": "TCP-Steuerport verwenden (RCP, Standard <strong>8051</strong>) – derselbe Endpunkt wie bei Rocview/OpenDecoder-Clients.",
+    "pi.label.host": "Rocrail-TCP-Host",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Rocrail-TCP-Port",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "Lokliste &amp; Scrollen (global)",
+    "pi.label.oledFontSize": "Schriftgröße für OLED-Composite / Beschriftungen (px)",
+    "pi.placeholder.oledFontSize": "leer = automatisch",
+    "pi.label.displayedLocos": "Angezeigte Loks",
+    "pi.option.displayedLocos.all": "Alle Loks",
+    "pi.option.displayedLocos.noauto": "Keine Loks im Auto-Modus",
+    "pi.label.locoListDialScroll": "Scrollen beim Drehen von OLED-Regler, Geschwindigkeitsregler (Listenmodus) oder Listen-Scroll-Encoder",
+    "pi.option.locoListDialScroll.page": "Eine Seite pro Schritt (Anzahl der sichtbaren OLED-Tasten)",
+    "pi.option.locoListDialScroll.single": "Eine Einheit pro Schritt",
+    "pi.section.accessory": "Diese Zubehör-Taste",
+    "pi.hint.accessory": "Steuert oder zeigt ein Gleisplanelement des Rocrail-Plans an, unabhängig von der Lokauswahl. Weichen, Signale und Ausgänge/Taster schalten beim Drücken; Drehscheiben wechseln zum nächsten Gleis; Sensoren, Blöcke und Gleise sind nur Statusanzeigen.",
+    "pi.label.accItemId": "Element-ID (wie im Rocrail-Plan)",
+    "pi.placeholder.accItemId": "z. B. sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "Elementtyp",
+    "pi.option.accItemType.auto": "Automatisch erkennen (Plan nach ID durchsuchen)",
+    "pi.option.accItemType.sw": "Weiche / Kreuzung / Dreiweg / Entkuppler (sw)",
+    "pi.option.accItemType.sg": "Signal (sg)",
+    "pi.option.accItemType.co": "Ausgang / Taster (co)",
+    "pi.option.accItemType.tt": "Drehscheibe (tt)",
+    "pi.option.accItemType.fb": "Sensor (fb, nur Status)",
+    "pi.option.accItemType.bk": "Block (bk, nur Status)",
+    "pi.option.accItemType.tk": "Gleis (tk, nur Status)",
+    "pi.section.oled": "Diese OLED-Taste (Fahrregler / Lokbedienung)",
+    "pi.hint.oled": "Rocview-Fahrregler-Ansichten: gilt nur während der Lokbedienung. Jede OLED-Taste kann Funktionen, Lokportrait oder Geschwindigkeit/Richtung unabhängig anzeigen.",
+    "pi.label.throttleView": "OLED-Modus im Fahrregler",
+    "pi.option.throttleView.function": "Funktionen (bisheriges Verhalten)",
+    "pi.option.throttleView.loco": "Lokportrait (Name & Bild wie in der Liste)",
+    "pi.option.throttleView.speed": "Geschwindigkeit &amp; Richtung",
+    "pi.option.throttleView.speedonly": "Nur Geschwindigkeit",
+    "pi.option.throttleView.directiononly": "Nur Richtung",
+    "pi.section.http": "Lokbilder &amp; Funktionssymbole per HTTP",
+    "pi.hint.http": "Der Rocview-/Rocrail-HTTP-Bilddienst muss die Dateien bereitstellen (Rocview-Wiki: Webservice). Composites laden von <code>http://&lt;TCP-Host oben&gt;:Port/Pfad/Datei</code>.",
+    "pi.label.httpPort": "HTTP-Port (Lokbilder &amp; Symbole)",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "HTTP-Basispfad für Lokbilder (/ für Root: http://Host:Port/&lt;Dateiname&gt;)",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "HTTP-Basispfad für Funktionssymbole (leer = Lokbild-Basispfad)",
+    "pi.placeholder.httpIconBasePath": "leer = wie bei Bildern",
+    "pi.label.accessorySvgBasePath": "HTTP-Basispfad für Zubehör-SVG-Theme (leer = eingebaute Symbole)",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}

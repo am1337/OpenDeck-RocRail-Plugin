@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Rocrail Loco Control</title>
+  <title data-i18n="pi.title">Rocrail Loco Control</title>
   <style>
     body { font-family: system-ui, sans-serif; padding: 12px; margin: 0; font-size: 12px; }
     label { display: block; margin-top: 8px; font-weight: 500; }
@@ -14,68 +14,68 @@
 </head>
 <body>
   <div class="section">
-    <h3 style="margin: 0 0 8px 0;">Rocrail server connection</h3>
-    <small class="hint">Use the TCP control port (RCP, default <strong>8051</strong>) – the same endpoint Rocview/OpenDecoder clients use.</small>
-    <label>Rocrail TCP host</label>
-    <input type="text" id="host" placeholder="127.0.0.1">
-    <label>Rocrail TCP port</label>
-    <input type="number" id="port" placeholder="8051">
+    <h3 style="margin: 0 0 8px 0;" data-i18n="pi.section.connection">Rocrail server connection</h3>
+    <small class="hint" data-i18n-html="pi.hint.connection">Use the TCP control port (RCP, default <strong>8051</strong>) – the same endpoint Rocview/OpenDecoder clients use.</small>
+    <label data-i18n="pi.label.host">Rocrail TCP host</label>
+    <input type="text" id="host" data-i18n-placeholder="pi.placeholder.host" placeholder="127.0.0.1">
+    <label data-i18n="pi.label.port">Rocrail TCP port</label>
+    <input type="number" id="port" data-i18n-placeholder="pi.placeholder.port" placeholder="8051">
   </div>
   <div class="section">
-    <h3 style="margin: 0 0 8px 0;">Loco list &amp; scroll (global)</h3>
-    <label>OLED composite / labelled text font size (px)</label>
-    <input type="number" id="oledTextFontSize" min="8" max="48" placeholder="empty = automatic">
-    <label>Displayed locos</label>
+    <h3 style="margin: 0 0 8px 0;" data-i18n-html="pi.section.locoList">Loco list &amp; scroll (global)</h3>
+    <label data-i18n="pi.label.oledFontSize">OLED composite / labelled text font size (px)</label>
+    <input type="number" id="oledTextFontSize" min="8" max="48" data-i18n-placeholder="pi.placeholder.oledFontSize" placeholder="empty = automatic">
+    <label data-i18n="pi.label.displayedLocos">Displayed locos</label>
     <select id="displayedLocos">
-      <option value="all">All locos</option>
-      <option value="noauto">No locos in auto mode</option>
+      <option value="all" data-i18n="pi.option.displayedLocos.all">All locos</option>
+      <option value="noauto" data-i18n="pi.option.displayedLocos.noauto">No locos in auto mode</option>
     </select>
-    <label>Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder</label>
+    <label data-i18n="pi.label.locoListDialScroll">Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder</label>
     <select id="locoListDialScroll">
-      <option value="page">One page per step (same count as visible OLED buttons)</option>
-      <option value="single">One unit per step</option>
+      <option value="page" data-i18n="pi.option.locoListDialScroll.page">One page per step (same count as visible OLED buttons)</option>
+      <option value="single" data-i18n="pi.option.locoListDialScroll.single">One unit per step</option>
     </select>
   </div>
   <div id="accessoryInstanceSection" class="section" style="display: none;">
-    <h3 style="margin: 0 0 8px 0;">This Accessory key</h3>
-    <small class="hint">Controls or displays one track-diagram element of the Rocrail plan, independent of loco selection. Turnouts, signals and outputs/buttons flip on press; turntables step to the next track; sensors, blocks and tracks are status-only.</small>
-    <label>Item ID (as in the Rocrail plan)</label>
-    <input type="text" id="accItemId" placeholder="e.g. sw1, sg2, co3, fb4, bk01">
-    <label>Item type</label>
+    <h3 style="margin: 0 0 8px 0;" data-i18n="pi.section.accessory">This Accessory key</h3>
+    <small class="hint" data-i18n="pi.hint.accessory">Controls or displays one track-diagram element of the Rocrail plan, independent of loco selection. Turnouts, signals and outputs/buttons flip on press; turntables step to the next track; sensors, blocks and tracks are status-only.</small>
+    <label data-i18n="pi.label.accItemId">Item ID (as in the Rocrail plan)</label>
+    <input type="text" id="accItemId" data-i18n-placeholder="pi.placeholder.accItemId" placeholder="e.g. sw1, sg2, co3, fb4, bk01">
+    <label data-i18n="pi.label.accItemType">Item type</label>
     <select id="accItemType">
-      <option value="auto">Auto-detect (search the plan by ID)</option>
-      <option value="sw">Turnout / crossing / three-way / decoupler (sw)</option>
-      <option value="sg">Signal (sg)</option>
-      <option value="co">Output / button (co)</option>
-      <option value="tt">Turntable (tt)</option>
-      <option value="fb">Sensor (fb, status only)</option>
-      <option value="bk">Block (bk, status only)</option>
-      <option value="tk">Track (tk, status only)</option>
+      <option value="auto" data-i18n="pi.option.accItemType.auto">Auto-detect (search the plan by ID)</option>
+      <option value="sw" data-i18n="pi.option.accItemType.sw">Turnout / crossing / three-way / decoupler (sw)</option>
+      <option value="sg" data-i18n="pi.option.accItemType.sg">Signal (sg)</option>
+      <option value="co" data-i18n="pi.option.accItemType.co">Output / button (co)</option>
+      <option value="tt" data-i18n="pi.option.accItemType.tt">Turntable (tt)</option>
+      <option value="fb" data-i18n="pi.option.accItemType.fb">Sensor (fb, status only)</option>
+      <option value="bk" data-i18n="pi.option.accItemType.bk">Block (bk, status only)</option>
+      <option value="tk" data-i18n="pi.option.accItemType.tk">Track (tk, status only)</option>
     </select>
   </div>
   <div id="oledInstanceSection" class="section" style="display: none;">
-    <h3 style="margin: 0 0 8px 0;">This OLED key (Throttle / Loco-control view)</h3>
-    <small class="hint">Rocview throttle view modes: applies only while controlling a locomotive. Each OLED key may show functions, loco portrait, or speed/direction independently.</small>
-    <label>Throttle OLED mode</label>
+    <h3 style="margin: 0 0 8px 0;" data-i18n="pi.section.oled">This OLED key (Throttle / Loco-control view)</h3>
+    <small class="hint" data-i18n="pi.hint.oled">Rocview throttle view modes: applies only while controlling a locomotive. Each OLED key may show functions, loco portrait, or speed/direction independently.</small>
+    <label data-i18n="pi.label.throttleView">Throttle OLED mode</label>
     <select id="throttleView">
-      <option value="function">Functions (unchanged legacy behaviour)</option>
-      <option value="loco">Loco portrait (name &amp; image like list view)</option>
-      <option value="speed">Speed &amp; direction</option>
-      <option value="speedonly">Speed only</option>
-      <option value="directiononly">Direction only</option>
+      <option value="function" data-i18n="pi.option.throttleView.function">Functions (unchanged legacy behaviour)</option>
+      <option value="loco" data-i18n="pi.option.throttleView.loco">Loco portrait (name &amp; image like list view)</option>
+      <option value="speed" data-i18n-html="pi.option.throttleView.speed">Speed &amp; direction</option>
+      <option value="speedonly" data-i18n="pi.option.throttleView.speedonly">Speed only</option>
+      <option value="directiononly" data-i18n="pi.option.throttleView.directiononly">Direction only</option>
     </select>
   </div>
   <div class="section">
-    <h3 style="margin: 0 0 8px 0;">Loco images &amp; function icons via HTTP</h3>
-    <small class="hint">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.</small>
-    <label style="margin-top:8px;">HTTP port (loco images &amp; icons)</label>
-    <input type="number" id="httpPort" placeholder="8080">
-    <label>HTTP base path for loco images (use / for root: http://host:port/&lt;filename&gt;)</label>
-    <input type="text" id="httpBasePath" placeholder="/">
-    <label>HTTP base path for function icons (empty = use loco image base path)</label>
-    <input type="text" id="httpIconBasePath" placeholder="empty = same as images">
-    <label>HTTP base path for accessory SVG theme (empty = built-in symbols)</label>
-    <input type="text" id="accessorySvgBasePath" placeholder="/svg/themes/SpDrS60">
+    <h3 style="margin: 0 0 8px 0;" data-i18n-html="pi.section.http">Loco images &amp; function icons via HTTP</h3>
+    <small class="hint" data-i18n-html="pi.hint.http">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.</small>
+    <label style="margin-top:8px;" data-i18n-html="pi.label.httpPort">HTTP port (loco images &amp; icons)</label>
+    <input type="number" id="httpPort" data-i18n-placeholder="pi.placeholder.httpPort" placeholder="8080">
+    <label data-i18n-html="pi.label.httpBasePath">HTTP base path for loco images (use / for root: http://host:port/&lt;filename&gt;)</label>
+    <input type="text" id="httpBasePath" data-i18n-placeholder="pi.placeholder.httpBasePath" placeholder="/">
+    <label data-i18n="pi.label.httpIconBasePath">HTTP base path for function icons (empty = use loco image base path)</label>
+    <input type="text" id="httpIconBasePath" data-i18n-placeholder="pi.placeholder.httpIconBasePath" placeholder="empty = same as images">
+    <label data-i18n="pi.label.accessorySvgBasePath">HTTP base path for accessory SVG theme (empty = built-in symbols)</label>
+    <input type="text" id="accessorySvgBasePath" data-i18n-placeholder="pi.placeholder.accessorySvgBasePath" placeholder="/svg/themes/SpDrS60">
   </div>
   <script>
     const PLUGIN_OLED_UUID = 'com.marikar.rocrailcontrol.oled';
@@ -86,11 +86,85 @@
       return v === 'single' ? 'single' : 'page';
     }
 
-    function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
+    /** Normalize OpenDeck/Elgato language codes (`de`, `de-DE`, `zh_CN`, …). */
+    function languageCandidates(raw) {
+      const code = String(raw || 'en').trim().replace(/-/g, '_');
+      if (!code) return ['en'];
+      const out = [];
+      const add = (c) => {
+        if (c && !out.includes(c)) out.push(c);
+      };
+      add(code);
+      const primary = code.split('_')[0].toLowerCase();
+      add(primary);
+      add('en');
+      return out;
+    }
+
+    async function fetchLocalizationMap(langCode) {
+      const res = await fetch(`../${encodeURIComponent(langCode)}.json`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`language file ${langCode}.json not found`);
+      const json = await res.json();
+      return json && typeof json.Localization === 'object' ? json.Localization : {};
+    }
+
+    /**
+     * English (`en.json`) is required. If a matching OpenDeck language file exists,
+     * its Localization entries override English for those keys.
+     */
+    async function loadPiStrings(appLanguage) {
+      let en = {};
+      try {
+        en = await fetchLocalizationMap('en');
+      } catch (e) {
+        console.error('Required language file en.json is missing or invalid', e);
+      }
+      const candidates = languageCandidates(appLanguage).filter((c) => c !== 'en');
+      for (const code of candidates) {
+        try {
+          const loc = await fetchLocalizationMap(code);
+          return { ...en, ...loc };
+        } catch (_) {
+          /* try next candidate */
+        }
+      }
+      return en;
+    }
+
+    function applyPiStrings(strings) {
+      document.querySelectorAll('[data-i18n]').forEach((el) => {
+        const key = el.getAttribute('data-i18n');
+        if (key && strings[key] != null) el.textContent = strings[key];
+      });
+      document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+        const key = el.getAttribute('data-i18n-html');
+        if (key && strings[key] != null) el.innerHTML = strings[key];
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (key && strings[key] != null) el.setAttribute('placeholder', strings[key]);
+      });
+      const titleKey = 'pi.title';
+      if (strings[titleKey]) document.title = strings[titleKey];
+    }
+
+    async function connectElgatoStreamDeckSocket(inPort, inUUID, inRegisterEvent, inInfo, inActionInfo) {
       inspectorSocketUuid = inUUID;
       const ai = inActionInfo ? JSON.parse(inActionInfo) : {};
       activeActionUuid = ai.action || '';
       actionInstanceUuid = ai.context || '';
+
+      let appLanguage = 'en';
+      try {
+        const info = inInfo ? JSON.parse(inInfo) : {};
+        appLanguage = info.application?.language || 'en';
+      } catch (_) {}
+
+      try {
+        applyPiStrings(await loadPiStrings(appLanguage));
+      } catch (e) {
+        console.error('Failed to apply PI localization', e);
+      }
 
       ws = new WebSocket('ws://127.0.0.1:' + inPort);
       ws.onopen = () => {
