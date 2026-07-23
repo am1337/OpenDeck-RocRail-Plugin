@@ -24,6 +24,7 @@ import {
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
+  DEFAULT_OLED_TEXT_FONT_PX,
   MAX_OLED_TEXT_FONT_PX,
   formatLocoDisplayName,
   getCachedCompositePng,
@@ -340,7 +341,8 @@ class RocrailPlugin {
 
   _effectiveOledTextFontPx() {
     const n = parseInt(this.globalSettings?.oledTextFontSize, 10);
-    return Number.isFinite(n) ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, n)) : null;
+    if (Number.isFinite(n)) return Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, n));
+    return DEFAULT_OLED_TEXT_FONT_PX;
   }
 
   _normalizeThrottleViewSetting(v) {

@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "기관차 목록 &amp; 스크롤 설정(전역)",
     "pi.label.oledFontSize": "글꼴 크기(픽셀)",
-    "pi.placeholder.oledFontSize": "비움 = 자동",
+    "pi.placeholder.oledFontSize": "비움 = 32",
     "pi.label.displayedLocos": "표시할 기관차",
     "pi.option.displayedLocos.all": "모든 기관차",
     "pi.option.displayedLocos.noauto": "자동 모드 기관차 제외",

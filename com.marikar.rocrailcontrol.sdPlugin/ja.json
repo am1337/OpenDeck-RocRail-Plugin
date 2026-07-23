@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "機関車リスト &amp; スクロール設定（グローバル）",
     "pi.label.oledFontSize": "フォントサイズ（ピクセル）",
-    "pi.placeholder.oledFontSize": "空欄 = 自動",
+    "pi.placeholder.oledFontSize": "空欄 = 32",
     "pi.label.displayedLocos": "表示する機関車",
     "pi.option.displayedLocos.all": "すべての機関車",
     "pi.option.displayedLocos.noauto": "オートモードの機関車を除外",

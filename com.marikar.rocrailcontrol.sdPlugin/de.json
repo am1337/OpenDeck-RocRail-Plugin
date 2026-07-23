@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "Einstellung Lokliste &amp; Scrollen (global)",
     "pi.label.oledFontSize": "Schriftgröße in Pixel",
-    "pi.placeholder.oledFontSize": "leer = automatisch",
+    "pi.placeholder.oledFontSize": "leer = 32",
     "pi.label.displayedLocos": "Angezeigte Loks",
     "pi.option.displayedLocos.all": "Alle Loks",
     "pi.option.displayedLocos.noauto": "Keine Loks im Auto-Modus",

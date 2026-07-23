@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "機車清單 &amp; 捲動設定（全域）",
     "pi.label.oledFontSize": "字型大小（像素）",
-    "pi.placeholder.oledFontSize": "空白 = 自動",
+    "pi.placeholder.oledFontSize": "空白 = 32",
     "pi.label.displayedLocos": "顯示的機車",
     "pi.option.displayedLocos.all": "全部機車",
     "pi.option.displayedLocos.noauto": "排除自動模式機車",

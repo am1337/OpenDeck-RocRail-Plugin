@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "Ajustes de lista de locomotoras &amp; desplazamiento (global)",
     "pi.label.oledFontSize": "Tamaño de fuente en píxeles",
-    "pi.placeholder.oledFontSize": "vacío = automático",
+    "pi.placeholder.oledFontSize": "vacío = 32",
     "pi.label.displayedLocos": "Locomotoras mostradas",
     "pi.option.displayedLocos.all": "Todas las locomotoras",
     "pi.option.displayedLocos.noauto": "Sin locomotoras en modo auto",

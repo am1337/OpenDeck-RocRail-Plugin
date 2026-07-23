@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "Réglages liste des locomotives &amp; défilement (global)",
     "pi.label.oledFontSize": "Taille de police en pixels",
-    "pi.placeholder.oledFontSize": "vide = automatique",
+    "pi.placeholder.oledFontSize": "vide = 32",
     "pi.label.displayedLocos": "Locomotives affichées",
     "pi.option.displayedLocos.all": "Toutes les locomotives",
     "pi.option.displayedLocos.noauto": "Pas de locomotives en mode auto",

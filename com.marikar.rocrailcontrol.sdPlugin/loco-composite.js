@@ -44,6 +44,8 @@ export const OLED_COMPOSITE_SIZE = 144;
 
 /** Upper bound for any user-configured OLED text font size (px). */
 export const MAX_OLED_TEXT_FONT_PX = 48;
+/** Default OLED label size when the global font-size setting is empty. */
+export const DEFAULT_OLED_TEXT_FONT_PX = 32;
 
 const CACHE_FORMAT_VERSION = 9;
 

@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "Loco list &amp; scroll settings (global)",
     "pi.label.oledFontSize": "Font size in pixels",
-    "pi.placeholder.oledFontSize": "empty = automatic",
+    "pi.placeholder.oledFontSize": "empty = 32",
     "pi.label.displayedLocos": "Displayed locos",
     "pi.option.displayedLocos.all": "All locos",
     "pi.option.displayedLocos.noauto": "No locos in auto mode",

@@ -73,7 +73,7 @@
     "pi.placeholder.port": "8051",
     "pi.section.locoList": "机车列表 &amp; 滚动设置（全局）",
     "pi.label.oledFontSize": "字体大小（像素）",
-    "pi.placeholder.oledFontSize": "留空 = 自动",
+    "pi.placeholder.oledFontSize": "留空 = 32",
     "pi.label.displayedLocos": "显示的机车",
     "pi.option.displayedLocos.all": "全部机车",
     "pi.option.displayedLocos.noauto": "排除自动模式机车",
