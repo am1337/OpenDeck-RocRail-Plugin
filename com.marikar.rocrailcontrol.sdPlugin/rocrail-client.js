@@ -63,6 +63,7 @@ function rocrailAttrBool(v) {
 
 /**
  * True if locomotive function `fnIndex` (0–32) is on, using top-level `locoProps` and/or `rawAttrs`.
+ * Falls back to Rocrail's catalog status fields `fn` (F0/lights) and `fx` (bitmask for F1+).
  */
 export function rocrailFnIsActive(locoProps, fnIndex) {
   if (!locoProps) return false;
@@ -77,17 +78,48 @@ export function rocrailFnIsActive(locoProps, fnIndex) {
     const r = locoProps.rawAttrs;
     if (Object.prototype.hasOwnProperty.call(r, kLower)) v = r[kLower];
     else if (Object.prototype.hasOwnProperty.call(r, kUpper)) v = r[kUpper];
+    else if (n === 0 && Object.prototype.hasOwnProperty.call(r, 'fn')) v = r.fn;
+    else if (n >= 1 && Object.prototype.hasOwnProperty.call(r, 'fx')) {
+      const fx = parseInt(String(r.fx), 10) || 0;
+      return !!(fx & (1 << (n - 1)));
+    }
   }
   return rocrailAttrBool(v);
 }
 
 /**
- * Apply `f0`…`f32` from a Rocrail attribute map into `locoProps` / `rawAttrs`.
+ * Apply Rocrail function status from an attribute map into `locoProps` / `rawAttrs`.
+ * Accepts explicit `f0`…`f32` (from `<fn/>` traffic) and catalog fields `fn` (F0/lights)
+ * + `fx` (bitmask, bit0=F1 …). Explicit `fN` wins over `fn`/`fx`.
  * @returns {boolean} true if any function bit changed
  */
 function mergeFnAttrsFromAttrMap(locoProps, attrs) {
   if (!locoProps || !attrs || typeof attrs !== 'object') return false;
   let updated = false;
+  if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
+
+  const setBit = (i, on, rawVal) => {
+    const kl = `f${i}`;
+    const b = !!on;
+    if (!!locoProps[kl] !== b) updated = true;
+    locoProps[kl] = b;
+    locoProps.rawAttrs[kl] = rawVal != null && `${rawVal}`.trim() !== '' ? String(rawVal) : b ? 'true' : 'false';
+  };
+
+  // Catalog / live <lc> status: lights + function bitmask (display).
+  if (Object.prototype.hasOwnProperty.call(attrs, 'fn')) {
+    setBit(0, rocrailAttrBool(attrs.fn), attrs.fn);
+    locoProps.rawAttrs.fn = String(attrs.fn);
+  }
+  if (Object.prototype.hasOwnProperty.call(attrs, 'fx')) {
+    const fx = parseInt(String(attrs.fx), 10) || 0;
+    locoProps.rawAttrs.fx = String(attrs.fx);
+    for (let i = 1; i <= 32; i++) {
+      setBit(i, !!(fx & (1 << (i - 1))), null);
+    }
+  }
+
+  // Explicit per-function flags override fn/fx when present (typical on <fn/>).
   for (let i = 0; i <= 32; i++) {
     const kl = `f${i}`;
     const ku = `F${i}`;
@@ -95,12 +127,7 @@ function mergeFnAttrsFromAttrMap(locoProps, attrs) {
     const hasU = Object.prototype.hasOwnProperty.call(attrs, ku);
     if (!hasL && !hasU) continue;
     const rawVal = attrs[kl] ?? attrs[ku];
-    const b = rocrailAttrBool(rawVal);
-    const prev = !!locoProps[kl];
-    if (prev !== b) updated = true;
-    locoProps[kl] = b;
-    if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
-    locoProps.rawAttrs[kl] = String(rawVal);
+    setBit(i, rocrailAttrBool(rawVal), rawVal);
   }
   return updated;
 }
@@ -257,7 +284,9 @@ export function overlayCachedLcFnOntoLocoProps(locoProps, cached) {
 }
 
 /**
- * Write current `locoProps` booleans/strings back into cache (after local merges or lcprops+friends).
+ * Write known `locoProps` function bits back into cache (after local merges or lcprops+friends).
+ * Only keys that are actually present on `locoProps` are written — never invent 33× false
+ * (that previously poisoned the cache after lcprops omitted live `fN` / only sent `fn`/`fx`).
  *
  * @param {Map<string, LocoFnCacheSlice>} cacheMap
  */
@@ -268,12 +297,17 @@ export function syncLocoFnCacheFromLocoProps(cacheMap, locoProps) {
   if (!slot.rawAttrs || typeof slot.rawAttrs !== 'object') slot.rawAttrs = {};
   for (let i = 0; i <= 32; i++) {
     const kl = `f${i}`;
+    if (!Object.prototype.hasOwnProperty.call(locoProps, kl)) continue;
     slot[kl] = !!locoProps[kl];
     if (locoProps.rawAttrs && typeof locoProps.rawAttrs === 'object' && kl in locoProps.rawAttrs) {
       slot.rawAttrs[kl] = String(locoProps.rawAttrs[kl]);
     } else {
       slot.rawAttrs[kl] = locoProps[kl] ? 'true' : 'false';
     }
+  }
+  if (locoProps.rawAttrs && typeof locoProps.rawAttrs === 'object') {
+    if ('fn' in locoProps.rawAttrs) slot.rawAttrs.fn = String(locoProps.rawAttrs.fn);
+    if ('fx' in locoProps.rawAttrs) slot.rawAttrs.fx = String(locoProps.rawAttrs.fx);
   }
   if (locoProps.V != null) {
     slot.V = locoProps.V;
@@ -519,11 +553,8 @@ function parseLcProps(xml, preferredId = null) {
     /** Full `<lc …/>` attribute map for replay on `<fn …/>` (Rocview sends a merged snapshot). */
     rawAttrs: { ...attrs },
   };
-  for (let i = 0; i <= 32; i++) {
-    const key = `f${i}`;
-    const v = attrs[key] ?? attrs[`F${i}`];
-    loco[key] = rocrailAttrBool(v);
-  }
+  // Decode fn/fx and any explicit fN — do not invent 33× false for missing attrs.
+  mergeFnAttrsFromAttrMap(loco, attrs);
   return loco;
 }
 

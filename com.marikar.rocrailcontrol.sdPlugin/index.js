@@ -888,8 +888,8 @@ class RocrailPlugin {
           syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
         } catch (e) {
           this.log(`lcprops failed loco=${loco.id}: ${e?.message || String(e)}`);
-          st.locoProps = { ...loco, rawAttrs: { id: loco.id } };
-          for (let i = 0; i <= 32; i++) st.locoProps[`f${i}`] = false;
+          // Keep list-row attrs (may include fn/fx); never invent 33× false — that poisons the fn cache.
+          st.locoProps = { ...loco, rawAttrs: { ...(loco.rawAttrs || {}), id: loco.id } };
           overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
           syncLcThrottleIntoRawAttrs(st.locoProps);
           syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
@@ -958,7 +958,11 @@ class RocrailPlugin {
         await this.rocrail.setFunction(st.selectedLoco.id, def.fn, next, st.locoProps);
         try {
           const merged = await this.rocrail.getLocoProps(st.selectedLoco.id);
-          if (merged) st.locoProps = merged;
+          if (merged) {
+            st.locoProps = merged;
+            // Re-apply live cache bits lcprops may omit; keep the just-toggled value authoritative.
+            overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, st.selectedLoco.id));
+          }
         } catch (e) {
           this.log(`getLocoProps after fn failed loco=${st.selectedLoco.id}: ${e?.message || String(e)}`);
         }
