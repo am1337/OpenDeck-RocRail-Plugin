@@ -276,6 +276,8 @@ class RocrailPlugin {
     this._rocrailCatalogLoaded = false;
     /** @type {ReturnType<typeof setTimeout> | null} */
     this._lcPushRefreshTimer = null;
+    /** Prevent double shutdown / exit when OpenDeck closes the WS and signals arrive. */
+    this._shuttingDown = false;
 
     /** OLED action-instance settings (keys: OLED context id from OpenDeck / Stream Deck PI). */
     /** @type {Map<string, { throttleView?: string }>} */
@@ -464,8 +466,10 @@ class RocrailPlugin {
 
   connect() {
     return new Promise((resolve, reject) => {
+      let opened = false;
       this.ws = new WebSocket(`ws://127.0.0.1:${this.port}`);
       this.ws.on('open', () => {
+        opened = true;
         this.log(`connected to OpenAction WS port=${this.port}`);
         this.send({
           event: this.registerEvent,
@@ -488,10 +492,40 @@ class RocrailPlugin {
       });
       this.ws.on('error', (e) => {
         this.log(`OpenAction WS error: ${e?.message || String(e)}`);
-        reject(e);
+        // Only reject the connect() promise if we never opened; otherwise shut down.
+        if (!opened) reject(e);
       });
-      this.ws.on('close', () => this.log('OpenAction WS closed'));
+      this.ws.on('close', () => {
+        this.log('OpenAction WS closed');
+        // OpenDeck stopped or restarted — exit so we do not leave orphan processes
+        // that keep a Rocrail TCP session and fight over OLED updates.
+        this.shutdown('OpenAction WS closed');
+      });
     });
+  }
+
+  /**
+   * Tear down Rocrail + OpenAction sockets and exit. Idempotent.
+   * Required because Flatpak OpenDeck starts this Node process via `flatpak-spawn --host`;
+   * when OpenDeck quits, orphans otherwise keep running.
+   */
+  shutdown(reason = 'shutdown') {
+    if (this._shuttingDown) return;
+    this._shuttingDown = true;
+    this.log(`shutting down (${reason})`);
+    if (this._lcPushRefreshTimer) {
+      clearTimeout(this._lcPushRefreshTimer);
+      this._lcPushRefreshTimer = null;
+    }
+    try {
+      this.rocrail?.disconnect();
+    } catch (_) {}
+    this.rocrail = null;
+    try {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.close();
+    } catch (_) {}
+    // Allow the log line to flush, then exit even if stdin is held open.
+    setTimeout(() => process.exit(0), 30).unref?.();
   }
 
   send(msg) {
@@ -1673,9 +1707,15 @@ async function main() {
     process.exit(1);
   }
 
+  const onSignal = (sig) => plugin.shutdown(sig);
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGHUP', () => onSignal('SIGHUP'));
+
   await plugin.connect();
   plugin.send({ event: 'getGlobalSettings', context: plugin.pluginUUID });
 
+  // Keep the process alive while the OpenAction WebSocket is open.
   process.stdin.resume();
 }
 
