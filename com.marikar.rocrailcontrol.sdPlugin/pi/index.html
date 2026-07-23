@@ -4,12 +4,72 @@
   <meta charset="utf-8">
   <title data-i18n="pi.title">Rocrail Loco Control</title>
   <style>
-    body { font-family: system-ui, sans-serif; padding: 12px; margin: 0; font-size: 12px; }
-    label { display: block; margin-top: 8px; font-weight: 500; }
-    input, select { width: 100%; padding: 6px; margin-top: 2px; box-sizing: border-box; }
-    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #333; }
+    /* Match OpenDeck / SDPI Property Inspector defaults (starterpack sdpi.css). */
+    :root {
+      --sdpi-bgcolor: #2d2d2d;
+      --sdpi-background: #3d3d3d;
+      --sdpi-color: #d8d8d8;
+      --sdpi-bordercolor: #3a3a3a;
+      --sdpi-linecolor: #454545;
+    }
+    html, body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 9pt;
+      background-color: var(--sdpi-bgcolor);
+      color: #9a9a9a;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    body { padding: 12px; }
+    h3 {
+      color: var(--sdpi-color);
+      font-size: 10pt;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      margin-top: 8px;
+      font-weight: 600;
+      color: #9a9a9a;
+      font-size: 9pt;
+    }
+    input, select {
+      width: 100%;
+      padding: 6px;
+      margin-top: 2px;
+      box-sizing: border-box;
+      font-size: 10pt;
+      font-weight: 600;
+      letter-spacing: -0.25pt;
+      color: var(--sdpi-color);
+      background-color: var(--sdpi-background);
+      border: 1pt solid #303030;
+      border-radius: 0;
+    }
+    input::placeholder {
+      color: #7a7a7a;
+    }
+    option {
+      color: var(--sdpi-color);
+      background-color: var(--sdpi-background);
+    }
+    .section {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--sdpi-linecolor);
+    }
     .section:last-child { border-bottom: none; }
-    small.hint { color: #aaa; font-weight: normal; display: block; margin-top: 4px; }
+    small.hint {
+      color: #9a9a9a;
+      font-weight: normal;
+      font-size: 9pt;
+      display: block;
+      margin-top: 4px;
+    }
+    small.hint strong, small.hint code {
+      color: var(--sdpi-color);
+    }
   </style>
 </head>
 <body>

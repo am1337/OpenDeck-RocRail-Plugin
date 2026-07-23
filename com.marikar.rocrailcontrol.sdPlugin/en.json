@@ -1,10 +1,10 @@
 {
   "Name": "RocRail Client",
-  "Description": "Plugin for OpenDeck that connects to RocRail and enables controlling your model train via Stream Deck",
+  "Description": "OpenDeck plugin to control your model railway via Stream Deck and RocRail",
   "Category": "Rocrail",
   "com.marikar.rocrailcontrol.oled": {
-    "Name": "Rocrail OLED Button",
-    "Tooltip": "OLED button for loco list, functions, or speed display",
+    "Name": "OLED button",
+    "Tooltip": "OLED button for loco list, functions or speed display.",
     "States": [
       {
         "Name": "Function off"
@@ -15,36 +15,36 @@
     ]
   },
   "com.marikar.rocrailcontrol.accessory": {
-    "Name": "Rocrail Accessory",
-    "Tooltip": "Control or watch one track-diagram element (turnout, signal, output/button, turntable; sensors/blocks/tracks status-only). Configure the item ID in the inspector."
+    "Name": "Accessory",
+    "Tooltip": "Control or display a track-diagram element (turnout, signal, output/button, turntable; sensors/blocks/tracks status only). Configure the item ID in the inspector."
   },
   "com.marikar.rocrailcontrol.dirfwd": {
-    "Name": "Rocrail Direction Fwd",
-    "Tooltip": "Set loco direction forward"
+    "Name": "Forward",
+    "Tooltip": "Set the locomotive direction to forward."
   },
   "com.marikar.rocrailcontrol.dirrev": {
-    "Name": "Rocrail Direction Rev",
-    "Tooltip": "Set loco direction reverse"
+    "Name": "Reverse",
+    "Tooltip": "Set the locomotive direction to reverse."
   },
   "com.marikar.rocrailcontrol.speed": {
-    "Name": "Rocrail Speed Dial",
-    "Tooltip": "Dial: rotate for speed, press to stop"
+    "Name": "Speed dial",
+    "Tooltip": "Dial: rotate for speed, press to stop."
   },
   "com.marikar.rocrailcontrol.stoploco": {
-    "Name": "Rocrail Stop loco",
-    "Tooltip": "Sets the current locomotive speed to zero. Requires a locomotive selected (throttle mode)."
+    "Name": "Stop loco",
+    "Tooltip": "Sets the current locomotive speed to 0 km/h."
   },
   "com.marikar.rocrailcontrol.speedplus": {
-    "Name": "Rocrail Speed +5",
-    "Tooltip": "Increases the current locomotive speed by five steps (% or km/h depending on the loco). Requires a locomotive selected."
+    "Name": "Speed +5",
+    "Tooltip": "Increases the current locomotive speed by five steps (% or km/h)."
   },
   "com.marikar.rocrailcontrol.speedminus": {
-    "Name": "Rocrail Speed −5",
-    "Tooltip": "Decreases the current locomotive speed by five steps (% or km/h depending on the loco). Requires a locomotive selected."
+    "Name": "Speed −5",
+    "Tooltip": "Decreases the current locomotive speed by five steps (% or km/h)."
   },
   "com.marikar.rocrailcontrol.scroll": {
-    "Name": "Rocrail List Scroll Dial",
-    "Tooltip": "Encoder: scroll loco list or function list in throttle; same step mode as the global OLED/speed dial setting",
+    "Name": "List scroll dial",
+    "Tooltip": "Encoder: scroll the loco list or the function list in throttle mode; same step size as the global OLED/speed dial setting.",
     "States": [
       {
         "Name": "Locos"
@@ -52,37 +52,37 @@
     ]
   },
   "com.marikar.rocrailcontrol.back": {
-    "Name": "Rocrail Back",
-    "Tooltip": "Return to loco list (stops current loco)"
+    "Name": "Back",
+    "Tooltip": "Return to the loco list (the current loco is stopped)."
   },
   "com.marikar.rocrailcontrol.scrollup": {
-    "Name": "Rocrail Scroll Up",
-    "Tooltip": "Scroll up through loco or function list"
+    "Name": "Scroll up",
+    "Tooltip": "Scroll up in the loco or function list."
   },
   "com.marikar.rocrailcontrol.scrolldown": {
-    "Name": "Rocrail Scroll Down",
-    "Tooltip": "Scroll down through loco or function list"
+    "Name": "Scroll down",
+    "Tooltip": "Scroll down in the loco or function list."
   },
   "Localization": {
-    "pi.title": "Rocrail Loco Control",
-    "pi.section.connection": "Rocrail server connection",
-    "pi.hint.connection": "Use the TCP control port (RCP, default <strong>8051</strong>) – the same endpoint Rocview/OpenDecoder clients use.",
-    "pi.label.host": "Rocrail TCP host",
+    "pi.title": "Loco control",
+    "pi.section.connection": "Rocrail server connection settings",
+    "pi.hint.connection": "TCP port (default <strong>8051</strong>, same configuration as RocView).",
+    "pi.label.host": "IP address of the RocRail server",
     "pi.placeholder.host": "127.0.0.1",
-    "pi.label.port": "Rocrail TCP port",
+    "pi.label.port": "TCP port of the Rocrail server",
     "pi.placeholder.port": "8051",
-    "pi.section.locoList": "Loco list &amp; scroll (global)",
-    "pi.label.oledFontSize": "OLED composite / labelled text font size (px)",
+    "pi.section.locoList": "Loco list &amp; scroll settings (global)",
+    "pi.label.oledFontSize": "Font size in pixels",
     "pi.placeholder.oledFontSize": "empty = automatic",
     "pi.label.displayedLocos": "Displayed locos",
     "pi.option.displayedLocos.all": "All locos",
     "pi.option.displayedLocos.noauto": "No locos in auto mode",
-    "pi.label.locoListDialScroll": "Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder",
-    "pi.option.locoListDialScroll.page": "One page per step (same count as visible OLED buttons)",
-    "pi.option.locoListDialScroll.single": "One unit per step",
-    "pi.section.accessory": "This Accessory key",
-    "pi.hint.accessory": "Controls or displays one track-diagram element of the Rocrail plan, independent of loco selection. Turnouts, signals and outputs/buttons flip on press; turntables step to the next track; sensors, blocks and tracks are status-only.",
-    "pi.label.accItemId": "Item ID (as in the Rocrail plan)",
+    "pi.label.locoListDialScroll": "Scroll speed",
+    "pi.option.locoListDialScroll.page": "One page per step",
+    "pi.option.locoListDialScroll.single": "One position per step",
+    "pi.section.accessory": "Accessory key settings",
+    "pi.hint.accessory": "Display of track-diagram elements.",
+    "pi.label.accItemId": "Item ID (identifier from Rocrail)",
     "pi.placeholder.accItemId": "e.g. sw1, sg2, co3, fb4, bk01",
     "pi.label.accItemType": "Item type",
     "pi.option.accItemType.auto": "Auto-detect (search the plan by ID)",
@@ -93,23 +93,23 @@
     "pi.option.accItemType.fb": "Sensor (fb, status only)",
     "pi.option.accItemType.bk": "Block (bk, status only)",
     "pi.option.accItemType.tk": "Track (tk, status only)",
-    "pi.section.oled": "This OLED key (Throttle / Loco-control view)",
-    "pi.hint.oled": "Rocview throttle view modes: applies only while controlling a locomotive. Each OLED key may show functions, loco portrait, or speed/direction independently.",
-    "pi.label.throttleView": "Throttle OLED mode",
-    "pi.option.throttleView.function": "Functions (unchanged legacy behaviour)",
-    "pi.option.throttleView.loco": "Loco portrait (name & image like list view)",
+    "pi.section.oled": "OLED key settings for loco control",
+    "pi.hint.oled": "Throttle views: an OLED key can show functions, loco portrait, or speed/direction.",
+    "pi.label.throttleView": "Throttle view",
+    "pi.option.throttleView.function": "Functions (default)",
+    "pi.option.throttleView.loco": "Loco (display only)",
     "pi.option.throttleView.speed": "Speed &amp; direction",
     "pi.option.throttleView.speedonly": "Speed only",
     "pi.option.throttleView.directiononly": "Direction only",
-    "pi.section.http": "Loco images &amp; function icons via HTTP",
-    "pi.hint.http": "Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.",
-    "pi.label.httpPort": "HTTP port (loco images &amp; icons)",
+    "pi.section.http": "Loco image settings",
+    "pi.hint.http": "The HTTP server in the RocRail server must be enabled.",
+    "pi.label.httpPort": "HTTP port",
     "pi.placeholder.httpPort": "8080",
-    "pi.label.httpBasePath": "HTTP base path for loco images (use / for root: http://host:port/&lt;filename&gt;)",
+    "pi.label.httpBasePath": "HTTP path for loco images (default is /)",
     "pi.placeholder.httpBasePath": "/",
-    "pi.label.httpIconBasePath": "HTTP base path for function icons (empty = use loco image base path)",
+    "pi.label.httpIconBasePath": "HTTP path for function icons (empty = same as loco images)",
     "pi.placeholder.httpIconBasePath": "empty = same as images",
-    "pi.label.accessorySvgBasePath": "HTTP base path for accessory SVG theme (empty = built-in symbols)",
+    "pi.label.accessorySvgBasePath": "HTTP path for accessory SVG theme (empty = built-in symbols)",
     "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
   }
 }
