@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "Complemento de OpenDeck para controlar el ferrocarril modelo mediante Stream Deck y RocRail",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "Botón OLED",
+    "Tooltip": "Botón OLED para la lista de locomotoras, funciones o visualización de velocidad.",
+    "States": [
+      {
+        "Name": "Función apagada"
+      },
+      {
+        "Name": "Función encendida"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "Accesorio",
+    "Tooltip": "Controlar o mostrar un elemento del esquema de vías (desvío, señal, salida/botón, placa giratoria; sensores/bloques/vías solo estado). Configure el ID en el inspector."
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "Adelante",
+    "Tooltip": "Establecer la dirección de la locomotora hacia adelante."
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "Atrás",
+    "Tooltip": "Establecer la dirección de la locomotora hacia atrás."
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "Regulador de velocidad",
+    "Tooltip": "Dial: girar para la velocidad, pulsar para detener."
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "Detener locomotora",
+    "Tooltip": "Establece la velocidad de la locomotora actual en 0 km/h."
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "Velocidad +5",
+    "Tooltip": "Aumenta la velocidad de la locomotora actual en cinco pasos (% o km/h)."
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "Velocidad −5",
+    "Tooltip": "Reduce la velocidad de la locomotora actual en cinco pasos (% o km/h)."
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "Dial de desplazamiento de lista",
+    "Tooltip": "Encoder: desplazar la lista de locomotoras o de funciones en modo mando; mismo paso que el ajuste global OLED/velocidad.",
+    "States": [
+      {
+        "Name": "Locomotoras"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "Atrás",
+    "Tooltip": "Volver a la lista de locomotoras (se detiene la locomotora actual)."
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "Desplazar arriba",
+    "Tooltip": "Desplazarse hacia arriba en la lista de locomotoras o funciones."
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "Desplazar abajo",
+    "Tooltip": "Desplazarse hacia abajo en la lista de locomotoras o funciones."
+  },
+  "Localization": {
+    "pi.title": "Control de locomotoras",
+    "pi.section.connection": "Ajustes de conexión al servidor Rocrail",
+    "pi.hint.connection": "Puerto TCP (predeterminado <strong>8051</strong>, misma configuración que RocView).",
+    "pi.label.host": "Dirección IP del servidor RocRail",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Puerto TCP del servidor Rocrail",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "Ajustes de lista de locomotoras &amp; desplazamiento (global)",
+    "pi.label.oledFontSize": "Tamaño de fuente en píxeles",
+    "pi.placeholder.oledFontSize": "vacío = automático",
+    "pi.label.displayedLocos": "Locomotoras mostradas",
+    "pi.option.displayedLocos.all": "Todas las locomotoras",
+    "pi.option.displayedLocos.noauto": "Sin locomotoras en modo auto",
+    "pi.label.locoListDialScroll": "Velocidad de desplazamiento",
+    "pi.option.locoListDialScroll.page": "Una página por paso",
+    "pi.option.locoListDialScroll.single": "Una posición por paso",
+    "pi.section.accessory": "Ajustes de la tecla de accesorio",
+    "pi.hint.accessory": "Visualización de elementos del esquema de vías.",
+    "pi.label.accItemId": "ID del elemento (identificador de Rocrail)",
+    "pi.placeholder.accItemId": "p. ej. sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "Tipo de elemento",
+    "pi.option.accItemType.auto": "Detección automática (buscar en el plan por ID)",
+    "pi.option.accItemType.sw": "Desvío / cruce / tres vías / desenganchador (sw)",
+    "pi.option.accItemType.sg": "Señal (sg)",
+    "pi.option.accItemType.co": "Salida / botón (co)",
+    "pi.option.accItemType.tt": "Placa giratoria (tt)",
+    "pi.option.accItemType.fb": "Sensor (fb, solo estado)",
+    "pi.option.accItemType.bk": "Bloque (bk, solo estado)",
+    "pi.option.accItemType.tk": "Vía (tk, solo estado)",
+    "pi.section.oled": "Ajustes de la tecla OLED en el control de locomotora",
+    "pi.hint.oled": "Vistas del regulador: una tecla OLED puede mostrar funciones, retrato de la loco o velocidad/dirección.",
+    "pi.label.throttleView": "Vista del regulador",
+    "pi.option.throttleView.function": "Funciones (predeterminado)",
+    "pi.option.throttleView.loco": "Locomotora (solo visualización)",
+    "pi.option.throttleView.speed": "Velocidad &amp; dirección",
+    "pi.option.throttleView.speedonly": "Solo velocidad",
+    "pi.option.throttleView.directiononly": "Solo dirección",
+    "pi.section.http": "Ajustes de imágenes de locomotoras",
+    "pi.hint.http": "El servidor HTTP del servidor RocRail debe estar activado.",
+    "pi.label.httpPort": "Puerto HTTP",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "Ruta HTTP para imágenes de locomotoras (predeterminado /)",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "Ruta HTTP para iconos de función (vacío = igual que imágenes)",
+    "pi.placeholder.httpIconBasePath": "vacío = igual que imágenes",
+    "pi.label.accessorySvgBasePath": "Ruta HTTP del tema SVG de accesorios (vacío = símbolos integrados)",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}

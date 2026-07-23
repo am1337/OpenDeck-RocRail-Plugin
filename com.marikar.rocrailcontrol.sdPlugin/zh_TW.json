@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "透過 Stream Deck 與 RocRail 控制模型鐵路的 OpenDeck 外掛程式",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "OLED 按鍵",
+    "Tooltip": "用於機車清單、功能或速度顯示的 OLED 按鍵。",
+    "States": [
+      {
+        "Name": "功能關閉"
+      },
+      {
+        "Name": "功能開啟"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "配件",
+    "Tooltip": "控制或顯示線路圖元素（道岔、號誌、輸出/按鈕、轉盤；感測器/區塊/軌道僅狀態）。請在檢查器中設定項目 ID。"
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "前進",
+    "Tooltip": "將機車方向設為前進。"
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "後退",
+    "Tooltip": "將機車方向設為後退。"
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "速度旋鈕",
+    "Tooltip": "旋鈕：旋轉調節速度，按下停止。"
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "停止機車",
+    "Tooltip": "將目前機車速度設為 0 km/h。"
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "速度 +5",
+    "Tooltip": "將目前機車速度提高五個步階（% 或 km/h）。"
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "速度 −5",
+    "Tooltip": "將目前機車速度降低五個步階（% 或 km/h）。"
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "清單捲動旋鈕",
+    "Tooltip": "編碼器：在操控模式下捲動機車清單或功能清單；步階與全域 OLED/速度旋鈕設定相同。",
+    "States": [
+      {
+        "Name": "機車"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "返回",
+    "Tooltip": "返回機車清單（目前機車將停止）。"
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "向上捲動",
+    "Tooltip": "在機車或功能清單中向上捲動。"
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "向下捲動",
+    "Tooltip": "在機車或功能清單中向下捲動。"
+  },
+  "Localization": {
+    "pi.title": "機車控制",
+    "pi.section.connection": "Rocrail 伺服器連線設定",
+    "pi.hint.connection": "TCP 連接埠（預設 <strong>8051</strong>，與 RocView 設定相同）。",
+    "pi.label.host": "RocRail 伺服器 IP 位址",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Rocrail 伺服器 TCP 連接埠",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "機車清單 &amp; 捲動設定（全域）",
+    "pi.label.oledFontSize": "字型大小（像素）",
+    "pi.placeholder.oledFontSize": "空白 = 自動",
+    "pi.label.displayedLocos": "顯示的機車",
+    "pi.option.displayedLocos.all": "全部機車",
+    "pi.option.displayedLocos.noauto": "排除自動模式機車",
+    "pi.label.locoListDialScroll": "捲動速度",
+    "pi.option.locoListDialScroll.page": "每步一頁",
+    "pi.option.locoListDialScroll.single": "每步一個位置",
+    "pi.section.accessory": "配件按鍵設定",
+    "pi.hint.accessory": "線路圖元素顯示。",
+    "pi.label.accItemId": "元素 ID（Rocrail 識別碼）",
+    "pi.placeholder.accItemId": "例如 sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "元素類型",
+    "pi.option.accItemType.auto": "自動偵測（依 ID 搜尋平面圖）",
+    "pi.option.accItemType.sw": "道岔 / 交叉 / 三開 / 解鉤器 (sw)",
+    "pi.option.accItemType.sg": "號誌 (sg)",
+    "pi.option.accItemType.co": "輸出 / 按鈕 (co)",
+    "pi.option.accItemType.tt": "轉盤 (tt)",
+    "pi.option.accItemType.fb": "感測器 (fb，僅狀態)",
+    "pi.option.accItemType.bk": "區塊 (bk，僅狀態)",
+    "pi.option.accItemType.tk": "軌道 (tk，僅狀態)",
+    "pi.section.oled": "機車操控時的 OLED 按鍵設定",
+    "pi.hint.oled": "油門檢視：OLED 按鍵可顯示功能、機車肖像或速度/方向。",
+    "pi.label.throttleView": "油門檢視",
+    "pi.option.throttleView.function": "功能（預設）",
+    "pi.option.throttleView.loco": "機車（僅顯示）",
+    "pi.option.throttleView.speed": "速度 &amp; 方向",
+    "pi.option.throttleView.speedonly": "僅速度",
+    "pi.option.throttleView.directiononly": "僅方向",
+    "pi.section.http": "機車圖片設定",
+    "pi.hint.http": "必須啟用 RocRail 伺服器中的 HTTP 服務。",
+    "pi.label.httpPort": "HTTP 連接埠",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "機車圖片的 HTTP 路徑（預設為 /）",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "功能圖示的 HTTP 路徑（空白 = 與機車圖片相同）",
+    "pi.placeholder.httpIconBasePath": "空白 = 與圖片相同",
+    "pi.label.accessorySvgBasePath": "配件 SVG 主題的 HTTP 路徑（空白 = 內建符號）",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}

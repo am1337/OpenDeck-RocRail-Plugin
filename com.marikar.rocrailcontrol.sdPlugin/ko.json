@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "Stream Deck와 RocRail로 모형 철도를 제어하는 OpenDeck 플러그인",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "OLED 버튼",
+    "Tooltip": "기관차 목록, 기능 또는 속도 표시용 OLED 버튼.",
+    "States": [
+      {
+        "Name": "기능 꺼짐"
+      },
+      {
+        "Name": "기능 켜짐"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "액세서리",
+    "Tooltip": "선로도 요소 제어 또는 표시(전철기, 신호, 출력/버튼, 턴테이블; 센서/블록/선로는 상태만). 인스펙터에서 항목 ID를 설정하세요."
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "전진",
+    "Tooltip": "기관차 진행 방향을 전진으로 설정합니다."
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "후진",
+    "Tooltip": "기관차 진행 방향을 후진으로 설정합니다."
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "속도 다이얼",
+    "Tooltip": "다이얼: 돌려서 속도 조절, 눌러서 정지."
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "기관차 정지",
+    "Tooltip": "현재 기관차 속도를 0 km/h로 설정합니다."
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "속도 +5",
+    "Tooltip": "현재 기관차 속도를 다섯 단계 올립니다(% 또는 km/h)."
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "속도 −5",
+    "Tooltip": "현재 기관차 속도를 다섯 단계 내립니다(% 또는 km/h)."
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "목록 스크롤 다이얼",
+    "Tooltip": "인코더: 스로틀 모드에서 기관차 또는 기능 목록을 스크롤합니다. OLED/속도 다이얼 전역 설정과 동일한 단계.",
+    "States": [
+      {
+        "Name": "기관차"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "뒤로",
+    "Tooltip": "기관차 목록으로 돌아갑니다(현재 기관차는 정지됩니다)."
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "위로 스크롤",
+    "Tooltip": "기관차 또는 기능 목록에서 위로 스크롤합니다."
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "아래로 스크롤",
+    "Tooltip": "기관차 또는 기능 목록에서 아래로 스크롤합니다."
+  },
+  "Localization": {
+    "pi.title": "기관차 제어",
+    "pi.section.connection": "Rocrail 서버 연결 설정",
+    "pi.hint.connection": "TCP 포트(기본 <strong>8051</strong>, RocView와 동일한 구성).",
+    "pi.label.host": "RocRail 서버 IP 주소",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Rocrail 서버 TCP 포트",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "기관차 목록 &amp; 스크롤 설정(전역)",
+    "pi.label.oledFontSize": "글꼴 크기(픽셀)",
+    "pi.placeholder.oledFontSize": "비움 = 자동",
+    "pi.label.displayedLocos": "표시할 기관차",
+    "pi.option.displayedLocos.all": "모든 기관차",
+    "pi.option.displayedLocos.noauto": "자동 모드 기관차 제외",
+    "pi.label.locoListDialScroll": "스크롤 속도",
+    "pi.option.locoListDialScroll.page": "단계당 한 페이지",
+    "pi.option.locoListDialScroll.single": "단계당 한 위치",
+    "pi.section.accessory": "액세서리 키 설정",
+    "pi.hint.accessory": "선로도 요소 표시.",
+    "pi.label.accItemId": "요소 ID(Rocrail 식별자)",
+    "pi.placeholder.accItemId": "예: sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "요소 유형",
+    "pi.option.accItemType.auto": "자동 감지(계획에서 ID로 검색)",
+    "pi.option.accItemType.sw": "전철기 / 크로싱 / 삼방 / 디커플러 (sw)",
+    "pi.option.accItemType.sg": "신호 (sg)",
+    "pi.option.accItemType.co": "출력 / 버튼 (co)",
+    "pi.option.accItemType.tt": "턴테이블 (tt)",
+    "pi.option.accItemType.fb": "센서 (fb, 상태만)",
+    "pi.option.accItemType.bk": "블록 (bk, 상태만)",
+    "pi.option.accItemType.tk": "선로 (tk, 상태만)",
+    "pi.section.oled": "기관차 제어 시 OLED 키 설정",
+    "pi.hint.oled": "스로틀 보기: OLED 키는 기능, 기관차 표시 또는 속도/방향을 표시할 수 있습니다.",
+    "pi.label.throttleView": "스로틀 보기",
+    "pi.option.throttleView.function": "기능(기본)",
+    "pi.option.throttleView.loco": "기관차(표시만)",
+    "pi.option.throttleView.speed": "속도 &amp; 방향",
+    "pi.option.throttleView.speedonly": "속도만",
+    "pi.option.throttleView.directiononly": "방향만",
+    "pi.section.http": "기관차 이미지 설정",
+    "pi.hint.http": "RocRail 서버의 HTTP 서버가 활성화되어 있어야 합니다.",
+    "pi.label.httpPort": "HTTP 포트",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "기관차 이미지 HTTP 경로(기본 /)",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "기능 아이콘 HTTP 경로(비움 = 기관차 이미지와 동일)",
+    "pi.placeholder.httpIconBasePath": "비움 = 이미지와 동일",
+    "pi.label.accessorySvgBasePath": "액세서리 SVG 테마 HTTP 경로(비움 = 내장 심볼)",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}

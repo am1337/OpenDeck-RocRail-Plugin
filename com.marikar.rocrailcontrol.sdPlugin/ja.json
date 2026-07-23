@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "Stream Deck と RocRail で鉄道模型を制御する OpenDeck プラグイン",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "OLED ボタン",
+    "Tooltip": "機関車リスト、ファンクション、速度表示用の OLED ボタン。",
+    "States": [
+      {
+        "Name": "ファンクション OFF"
+      },
+      {
+        "Name": "ファンクション ON"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "アクセサリ",
+    "Tooltip": "線路図要素の制御または表示（転轍機、信号、出力/ボタン、ターンテーブル；センサー/ブロック/線路は状態のみ）。インスペクターで項目 ID を設定します。"
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "前進",
+    "Tooltip": "機関車の進行方向を前進に設定します。"
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "後進",
+    "Tooltip": "機関車の進行方向を後進に設定します。"
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "速度ダイヤル",
+    "Tooltip": "ダイヤル：回して速度変更、押して停止。"
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "機関車停止",
+    "Tooltip": "現在の機関車の速度を 0 km/h に設定します。"
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "速度 +5",
+    "Tooltip": "現在の機関車の速度を 5 ステップ上げます（% または km/h）。"
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "速度 −5",
+    "Tooltip": "現在の機関車の速度を 5 ステップ下げます（% または km/h）。"
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "リストスクロールダイヤル",
+    "Tooltip": "エンコーダー：スロットルモードで機関車リストまたはファンクションリストをスクロール。OLED/速度ダイヤルのグローバル設定と同じステップ。",
+    "States": [
+      {
+        "Name": "機関車"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "戻る",
+    "Tooltip": "機関車リストに戻ります（現在の機関車は停止します）。"
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "上へスクロール",
+    "Tooltip": "機関車またはファンクションリストを上へスクロールします。"
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "下へスクロール",
+    "Tooltip": "機関車またはファンクションリストを下へスクロールします。"
+  },
+  "Localization": {
+    "pi.title": "機関車制御",
+    "pi.section.connection": "Rocrail サーバー接続設定",
+    "pi.hint.connection": "TCP ポート（既定 <strong>8051</strong>、RocView と同じ設定）。",
+    "pi.label.host": "RocRail サーバーの IP アドレス",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Rocrail サーバーの TCP ポート",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "機関車リスト &amp; スクロール設定（グローバル）",
+    "pi.label.oledFontSize": "フォントサイズ（ピクセル）",
+    "pi.placeholder.oledFontSize": "空欄 = 自動",
+    "pi.label.displayedLocos": "表示する機関車",
+    "pi.option.displayedLocos.all": "すべての機関車",
+    "pi.option.displayedLocos.noauto": "オートモードの機関車を除外",
+    "pi.label.locoListDialScroll": "スクロール速度",
+    "pi.option.locoListDialScroll.page": "1 ステップで 1 ページ",
+    "pi.option.locoListDialScroll.single": "1 ステップで 1 位置",
+    "pi.section.accessory": "アクセサリキー設定",
+    "pi.hint.accessory": "線路図要素の表示。",
+    "pi.label.accItemId": "要素 ID（Rocrail の識別子）",
+    "pi.placeholder.accItemId": "例: sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "要素タイプ",
+    "pi.option.accItemType.auto": "自動検出（プランを ID で検索）",
+    "pi.option.accItemType.sw": "転轍機 / クロッシング / 三方 / デカプラー (sw)",
+    "pi.option.accItemType.sg": "信号 (sg)",
+    "pi.option.accItemType.co": "出力 / ボタン (co)",
+    "pi.option.accItemType.tt": "ターンテーブル (tt)",
+    "pi.option.accItemType.fb": "センサー (fb、状態のみ)",
+    "pi.option.accItemType.bk": "ブロック (bk、状態のみ)",
+    "pi.option.accItemType.tk": "線路 (tk、状態のみ)",
+    "pi.section.oled": "機関車操作時の OLED キー設定",
+    "pi.hint.oled": "スロットル表示：OLED キーはファンクション、機関車表示、速度/方向を表示できます。",
+    "pi.label.throttleView": "スロットル表示",
+    "pi.option.throttleView.function": "ファンクション（標準）",
+    "pi.option.throttleView.loco": "機関車（表示のみ）",
+    "pi.option.throttleView.speed": "速度 &amp; 方向",
+    "pi.option.throttleView.speedonly": "速度のみ",
+    "pi.option.throttleView.directiononly": "方向のみ",
+    "pi.section.http": "機関車画像の設定",
+    "pi.hint.http": "RocRail サーバーの HTTP サーバーを有効にする必要があります。",
+    "pi.label.httpPort": "HTTP ポート",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "機関車画像の HTTP パス（既定は /）",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "ファンクションアイコンの HTTP パス（空欄 = 機関車画像と同じ）",
+    "pi.placeholder.httpIconBasePath": "空欄 = 画像と同じ",
+    "pi.label.accessorySvgBasePath": "アクセサリ SVG テーマの HTTP パス（空欄 = 内蔵シンボル）",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}

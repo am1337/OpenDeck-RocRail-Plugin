@@ -1,0 +1,115 @@
+{
+  "Name": "RocRail Client",
+  "Description": "通过 Stream Deck 与 RocRail 控制模型铁路的 OpenDeck 插件",
+  "Category": "Rocrail",
+  "com.marikar.rocrailcontrol.oled": {
+    "Name": "OLED 按键",
+    "Tooltip": "用于机车列表、功能或速度显示的 OLED 按键。",
+    "States": [
+      {
+        "Name": "功能关闭"
+      },
+      {
+        "Name": "功能开启"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.accessory": {
+    "Name": "配件",
+    "Tooltip": "控制或显示线路图元素（道岔、信号、输出/按钮、转盘；传感器/区段/轨道仅状态）。请在检查器中配置项目 ID。"
+  },
+  "com.marikar.rocrailcontrol.dirfwd": {
+    "Name": "前进",
+    "Tooltip": "将机车方向设为前进。"
+  },
+  "com.marikar.rocrailcontrol.dirrev": {
+    "Name": "后退",
+    "Tooltip": "将机车方向设为后退。"
+  },
+  "com.marikar.rocrailcontrol.speed": {
+    "Name": "速度旋钮",
+    "Tooltip": "旋钮：旋转调节速度，按下停止。"
+  },
+  "com.marikar.rocrailcontrol.stoploco": {
+    "Name": "停止机车",
+    "Tooltip": "将当前机车速度设为 0 km/h。"
+  },
+  "com.marikar.rocrailcontrol.speedplus": {
+    "Name": "速度 +5",
+    "Tooltip": "将当前机车速度提高五个步长（% 或 km/h）。"
+  },
+  "com.marikar.rocrailcontrol.speedminus": {
+    "Name": "速度 −5",
+    "Tooltip": "将当前机车速度降低五个步长（% 或 km/h）。"
+  },
+  "com.marikar.rocrailcontrol.scroll": {
+    "Name": "列表滚动旋钮",
+    "Tooltip": "编码器：在操控模式下滚动机车列表或功能列表；步长与全局 OLED/速度旋钮设置相同。",
+    "States": [
+      {
+        "Name": "机车"
+      }
+    ]
+  },
+  "com.marikar.rocrailcontrol.back": {
+    "Name": "返回",
+    "Tooltip": "返回机车列表（当前机车将停止）。"
+  },
+  "com.marikar.rocrailcontrol.scrollup": {
+    "Name": "向上滚动",
+    "Tooltip": "在机车或功能列表中向上滚动。"
+  },
+  "com.marikar.rocrailcontrol.scrolldown": {
+    "Name": "向下滚动",
+    "Tooltip": "在机车或功能列表中向下滚动。"
+  },
+  "Localization": {
+    "pi.title": "机车控制",
+    "pi.section.connection": "Rocrail 服务器连接设置",
+    "pi.hint.connection": "TCP 端口（默认 <strong>8051</strong>，与 RocView 配置相同）。",
+    "pi.label.host": "RocRail 服务器 IP 地址",
+    "pi.placeholder.host": "127.0.0.1",
+    "pi.label.port": "Rocrail 服务器 TCP 端口",
+    "pi.placeholder.port": "8051",
+    "pi.section.locoList": "机车列表 &amp; 滚动设置（全局）",
+    "pi.label.oledFontSize": "字体大小（像素）",
+    "pi.placeholder.oledFontSize": "留空 = 自动",
+    "pi.label.displayedLocos": "显示的机车",
+    "pi.option.displayedLocos.all": "全部机车",
+    "pi.option.displayedLocos.noauto": "排除自动模式机车",
+    "pi.label.locoListDialScroll": "滚动速度",
+    "pi.option.locoListDialScroll.page": "每步一页",
+    "pi.option.locoListDialScroll.single": "每步一个位置",
+    "pi.section.accessory": "配件按键设置",
+    "pi.hint.accessory": "线路图元素显示。",
+    "pi.label.accItemId": "元素 ID（Rocrail 标识）",
+    "pi.placeholder.accItemId": "例如 sw1, sg2, co3, fb4, bk01",
+    "pi.label.accItemType": "元素类型",
+    "pi.option.accItemType.auto": "自动检测（按 ID 搜索平面图）",
+    "pi.option.accItemType.sw": "道岔 / 交叉 / 三开 / 解钩器 (sw)",
+    "pi.option.accItemType.sg": "信号 (sg)",
+    "pi.option.accItemType.co": "输出 / 按钮 (co)",
+    "pi.option.accItemType.tt": "转盘 (tt)",
+    "pi.option.accItemType.fb": "传感器 (fb，仅状态)",
+    "pi.option.accItemType.bk": "区段 (bk，仅状态)",
+    "pi.option.accItemType.tk": "轨道 (tk，仅状态)",
+    "pi.section.oled": "机车操控时的 OLED 按键设置",
+    "pi.hint.oled": "油门视图：OLED 按键可显示功能、机车肖像或速度/方向。",
+    "pi.label.throttleView": "油门视图",
+    "pi.option.throttleView.function": "功能（默认）",
+    "pi.option.throttleView.loco": "机车（仅显示）",
+    "pi.option.throttleView.speed": "速度 &amp; 方向",
+    "pi.option.throttleView.speedonly": "仅速度",
+    "pi.option.throttleView.directiononly": "仅方向",
+    "pi.section.http": "机车图片设置",
+    "pi.hint.http": "必须启用 RocRail 服务器中的 HTTP 服务。",
+    "pi.label.httpPort": "HTTP 端口",
+    "pi.placeholder.httpPort": "8080",
+    "pi.label.httpBasePath": "机车图片的 HTTP 路径（默认为 /）",
+    "pi.placeholder.httpBasePath": "/",
+    "pi.label.httpIconBasePath": "功能图标的 HTTP 路径（留空 = 与机车图片相同）",
+    "pi.placeholder.httpIconBasePath": "留空 = 与图片相同",
+    "pi.label.accessorySvgBasePath": "配件 SVG 主题的 HTTP 路径（留空 = 内置符号）",
+    "pi.placeholder.accessorySvgBasePath": "/svg/themes/SpDrS60"
+  }
+}
