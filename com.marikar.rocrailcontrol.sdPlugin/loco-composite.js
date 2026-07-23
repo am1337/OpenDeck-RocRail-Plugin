@@ -45,7 +45,7 @@ export const OLED_COMPOSITE_SIZE = 144;
 /** Upper bound for any user-configured OLED text font size (px). */
 export const MAX_OLED_TEXT_FONT_PX = 48;
 
-const CACHE_FORMAT_VERSION = 8;
+const CACHE_FORMAT_VERSION = 9;
 
 const ICON_CACHE_FORMAT_VERSION = 2;
 
@@ -64,6 +64,40 @@ function escapeXml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Alphabetic baseline Y that visually centers a line at `centerY`.
+ * Prefer this over `dominant-baseline="middle"`: near the top of an SVG,
+ * librsvg/sharp often clips the em-box and leaves ink artifacts above glyphs.
+ */
+function svgTextBaselineY(centerY, fontSizePx) {
+  return centerY + fontSizePx * 0.35;
+}
+
+/** Lowest safe vertical center so glyph ink stays inside the SVG viewBox. */
+function svgTextMinCenterY(fontSizePx) {
+  return fontSizePx * 0.85;
+}
+
+/**
+ * Rasterise an SVG that may draw text near y=0. Extra top rows absorb librsvg
+ * em-box overflow (otherwise wrapped into the first image row as letter artifacts),
+ * then the pad is cropped away.
+ */
+async function sharpSvgPngCropTopPad(svgBodyInner, width, height, topPad, background = '#000000') {
+  const pad = Math.max(0, Math.ceil(topPad));
+  const svg = Buffer.from(
+    `<svg width="${width}" height="${height + pad}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="${width}" height="${height + pad}" fill="${background}"/>
+      <g transform="translate(0 ${pad})">${svgBodyInner}</g>
+    </svg>`
+  );
+  if (pad <= 0) return sharp(svg).png().toBuffer();
+  return sharp(svg)
+    .extract({ left: 0, top: pad, width, height })
+    .png()
+    .toBuffer();
 }
 
 export function sourceContentHash(buffer) {
@@ -147,13 +181,18 @@ async function renderTopHalfPng(displayText, size, half, bgRgb, fontSizePx = nul
       : auto;
   const { r, g, b } = bgRgb;
   const textFill = textColorForBackground(r, g, b);
-  const svg = Buffer.from(
-    `<svg width="${size}" height="${half}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100%" height="100%" fill="rgb(${r},${g},${b})"/>
-      <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${textFill}" font-size="${fontSize}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(displayText)}</text>
-    </svg>`
+  const centerY = Math.max(svgTextMinCenterY(fontSize), half / 2);
+  const textY = svgTextBaselineY(centerY, fontSize);
+  const bg = `rgb(${r},${g},${b})`;
+  const pad = Math.ceil(fontSize * 0.55);
+  return sharpSvgPngCropTopPad(
+    `<rect width="${size}" height="${half}" fill="${bg}"/>
+      <text x="50%" y="${textY}" text-anchor="middle" fill="${textFill}" font-size="${fontSize}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(displayText)}</text>`,
+    size,
+    half,
+    pad,
+    bg
   );
-  return sharp(svg).png().toBuffer();
 }
 
 async function renderBottomHalfPng(sourceBuffer, size, half, padRgb) {
@@ -227,13 +266,16 @@ export async function renderThrottleSpeedDirPng(
       fontSizePx != null && Number.isFinite(fontSizePx)
         ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
         : Math.min(40, Math.max(14, Math.floor(size * 0.22)));
-    const svg = Buffer.from(
-      `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-        <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="${fontFamily}">${escapeXml(single)}</text>
-      </svg>`
+    const centerY = Math.max(svgTextMinCenterY(fs), size / 2);
+    const textY = svgTextBaselineY(centerY, fs);
+    return sharpSvgPngCropTopPad(
+      `<rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
+        <text x="50%" y="${textY}" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="${fontFamily}">${escapeXml(single)}</text>`,
+      size,
+      size,
+      Math.ceil(fs * 0.55),
+      '#000000'
     );
-    return sharp(svg).png().toBuffer();
   }
 
   // mode === 'both': speed text on the top half, direction arrow on the bottom half.
@@ -241,17 +283,21 @@ export async function renderThrottleSpeedDirPng(
     fontSizePx != null && Number.isFinite(fontSizePx)
       ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
       : Math.min(22, Math.max(11, Math.floor(half * 0.28)));
-  const topSvg = Buffer.from(
-    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
-      <text x="50%" y="${half * 0.5}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="${fontFamily}">${escapeXml(String(speedText ?? ''))}</text>
-    </svg>`
+  const speedCenterY = Math.max(svgTextMinCenterY(fsTop), half * 0.5);
+  const speedTextY = svgTextBaselineY(speedCenterY, fsTop);
+  const topPng = await sharpSvgPngCropTopPad(
+    `<rect width="${size}" height="${size}" fill="rgb(${bgRgb.r},${bgRgb.g},${bgRgb.b})"/>
+      <text x="50%" y="${speedTextY}" text-anchor="middle" fill="${fg}" font-size="${fsTop}" font-family="${fontFamily}">${escapeXml(String(speedText ?? ''))}</text>`,
+    size,
+    size,
+    Math.ceil(fsTop * 0.55),
+    '#000000'
   );
   const box = Math.round(half * 0.82);
   const arrow = await getDirectionArrowPng(dirForward, box, fg);
   const left = Math.round((size - box) / 2);
   const top = Math.round(half + (half - box) / 2);
-  return sharp(topSvg).composite([{ input: arrow, left, top }]).png().toBuffer();
+  return sharp(topPng).composite([{ input: arrow, left, top }]).png().toBuffer();
 }
 
 export async function renderLocoCompositePng(
@@ -441,23 +487,29 @@ export async function renderAccessoryTilePng(info, size = OLED_COMPOSITE_SIZE, f
     fontSizePx != null && Number.isFinite(fontSizePx)
       ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
       : Math.min(22, Math.max(12, Math.floor(size * 0.13)));
-  const stripH = Math.max(Math.round(size * 0.24), Math.round(fs * 1.5));
+  // Tall enough strip; text is drawn with a cropped top pad so librsvg em-box overflow
+  // cannot wrap into the first image row (artifacts above letters).
+  const stripH = Math.max(Math.round(size * 0.24), Math.round(fs * 1.9));
   const iconBox = size - stripH;
   const iconCx = size / 2;
   const iconCy = stripH + iconBox / 2;
+  const centerY = Math.max(svgTextMinCenterY(fs), stripH / 2);
+  const textY = svgTextBaselineY(centerY, fs);
+  const topPad = Math.ceil(fs * 0.55);
 
   const maxChars = Math.max(3, Math.floor((size - 6) / (fs * 0.58)));
   const label = name.length > maxChars ? `${name.slice(0, maxChars - 1)}…` : name;
-
-  const baseSvg = Buffer.from(
-    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="#000000"/>
-      <text x="50%" y="${stripH / 2}" dominant-baseline="middle" text-anchor="middle" fill="${ACC_TEXT}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(label)}</text>
-    </svg>`
-  );
+  const labelSvg = `<text x="50%" y="${textY}" text-anchor="middle" fill="${ACC_TEXT}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(label)}</text>`;
 
   if (info?.iconBuffer?.length) {
     try {
+      const basePng = await sharpSvgPngCropTopPad(
+        `<rect width="${size}" height="${size}" fill="#000000"/>${labelSvg}`,
+        size,
+        size,
+        topPad,
+        '#000000'
+      );
       const inner = Math.round(iconBox * 0.92);
       let pipeline = sharp(info.iconBuffer).resize(inner, inner, {
         fit: 'contain',
@@ -469,21 +521,22 @@ export async function renderAccessoryTilePng(info, size = OLED_COMPOSITE_SIZE, f
       const { data, info: meta } = await pipeline.png().toBuffer({ resolveWithObject: true });
       const left = Math.round(iconCx - meta.width / 2);
       const top = Math.round(iconCy - meta.height / 2);
-      return sharp(baseSvg).composite([{ input: data, left, top }]).png().toBuffer();
+      return sharp(basePng).composite([{ input: data, left, top }]).png().toBuffer();
     } catch {
       // fall through to the built-in glyph
     }
   }
 
   const glyphScale = (iconBox * 0.9) / 100;
-  const svg = Buffer.from(
-    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="#000000"/>
-      <text x="50%" y="${stripH / 2}" dominant-baseline="middle" text-anchor="middle" fill="${ACC_TEXT}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(label)}</text>
-      <g transform="translate(${iconCx} ${iconCy}) rotate(${rot}) scale(${glyphScale}) translate(-50 -50)">${accessoryGlyphSvg(info || {})}</g>
-    </svg>`
+  return sharpSvgPngCropTopPad(
+    `<rect width="${size}" height="${size}" fill="#000000"/>
+      ${labelSvg}
+      <g transform="translate(${iconCx} ${iconCy}) rotate(${rot}) scale(${glyphScale}) translate(-50 -50)">${accessoryGlyphSvg(info || {})}</g>`,
+    size,
+    size,
+    topPad,
+    '#000000'
   );
-  return sharp(svg).png().toBuffer();
 }
 
 /** Word-wrap a function label into at most `maxLines` lines of `maxCharsPerLine` characters. */
@@ -516,32 +569,40 @@ export async function renderFunctionLabelPng(labelText, on, size = OLED_COMPOSIT
     fontSizePx != null && Number.isFinite(fontSizePx)
       ? Math.min(MAX_OLED_TEXT_FONT_PX, Math.max(8, Math.round(fontSizePx)))
       : Math.min(26, Math.max(14, Math.floor(size * 0.15)));
-  const key = `${labelText}|${on ? 1 : 0}|${fs}|${size}`;
+  const key = `${labelText}|${on ? 1 : 0}|${fs}|${size}|v3`;
   const cached = _fnLabelTileCache.get(key);
   if (cached) return cached;
 
   // Wrap to what fits at this font size (approx. average glyph width 0.58 em).
   const maxChars = Math.max(3, Math.floor((size - 8) / (fs * 0.58)));
-  const maxLines = Math.max(1, Math.min(5, Math.floor(size / (fs * 1.3))));
+  const lineH = fs * 1.25;
+  const topMin = svgTextMinCenterY(fs);
+  const bottomMax = size - fs * 0.45;
+  const usableH = Math.max(lineH, bottomMax - topMin + lineH);
+  const maxLines = Math.max(1, Math.min(5, Math.floor(usableH / lineH)));
   const lines = wrapLabelLines(labelText, maxChars, maxLines);
 
   const bg = on ? '#ffffff' : '#000000';
   const fg = on ? '#000000' : '#ffffff';
-  const lineH = fs * 1.25;
-  const firstCenterY = size / 2 - ((lines.length - 1) * lineH) / 2;
+  let firstCenterY = size / 2 - ((lines.length - 1) * lineH) / 2;
+  if (firstCenterY < topMin) firstCenterY = topMin;
+  const lastCenterY = firstCenterY + (lines.length - 1) * lineH;
+  if (lastCenterY > bottomMax) {
+    firstCenterY = Math.max(topMin, bottomMax - (lines.length - 1) * lineH);
+  }
   const texts = lines
-    .map(
-      (line, i) =>
-        `<text x="50%" y="${firstCenterY + i * lineH}" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(line)}</text>`
-    )
+    .map((line, i) => {
+      const y = svgTextBaselineY(firstCenterY + i * lineH, fs);
+      return `<text x="50%" y="${y}" text-anchor="middle" fill="${fg}" font-size="${fs}" font-family="system-ui,Segoe UI,sans-serif">${escapeXml(line)}</text>`;
+    })
     .join('');
-  const svg = Buffer.from(
-    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${size}" height="${size}" fill="${bg}"/>
-      ${texts}
-    </svg>`
+  const png = await sharpSvgPngCropTopPad(
+    `<rect width="${size}" height="${size}" fill="${bg}"/>${texts}`,
+    size,
+    size,
+    Math.ceil(fs * 0.55),
+    bg
   );
-  const png = await sharp(svg).png().toBuffer();
   _fnLabelTileCache.set(key, png);
   return png;
 }
