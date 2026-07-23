@@ -24,7 +24,7 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 - [Rocrail](https://wiki.rocrail.net) running with client access (**Client Service**, default port **8051**) and http access (**Rocweb**, default port **8080**)
 - Node.js **20 or newer**
 
-## Build
+## Build (optional)
 
 1. Install dependencies:
    ```bash
@@ -33,6 +33,8 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
    ```
 2. Create archive
    zip -r com.marikar.rocrailcontrol.streamDeckPlugin com.marikar.rocrailcontrol.sdPlugin
+   
+or just run ```./createPackage.sh```
 
 ## Installation
 
@@ -44,9 +46,9 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 
 ## Global Configuration
 
-Rocrail’s **RCP client/server** channel (TCP control port), **HTTP image service**, scrolling behaviour, default font size on OLED tiles (composite image text and OLED button titles), etc. live in **global plugin settings**.
+`Rocrail server connection settings` **IP address of the RocRail server** and **TCP port of the Rocrail server** must be set if server does not run on localhost and default port.
 
-Global options (Rocrail TCP, HTTP image service, font size, scroll step) are edited from **any** Rocrail Property Inspector instance—**you only need to open the inspector once for those shared fields**; they apply to the whole plugin/profile.
+`Loco image settings` **HTTP port** and **HTTP path for loco images** must be set if HTTP-Server does not run on default port or images of a subfolder shall be used.
 
 
 ## Button configuration
@@ -55,13 +57,13 @@ Multiple devices can be used to control more than one loco at once. For each dev
 
 For Ajazz AKP03E a recommended configuration is:
 
-- Assign "Rocrail OLED Button" to all 6 OLED buttons. Define a button to show "loco portrait" in "loco control mode (throttle)" , define a button to show "speed & direction". Pressing on this button changes the direction.
+- Assign "OLED Button" to all 6 OLED buttons. Define a button to show "loco" in "Throttle view" , define a button to show "speed & direction". Pressing on this button changes the direction.
 
-- Assign "Rocrail Speed Dial" to dial button. This allows to set speed (turning button) and stop loco (pressing button). In loco list mode it is used to scroll the list. Set scroll mode to "One page per step" if the list of locos is very long.
+- Assign "Speed Dial" to dial button. This allows to set speed (turning button) and stop loco (pressing button). In loco list mode it is used to scroll the list. Set scroll mode to "One page per step" if the list of locos is very long.
 
-- Assign "Rocrail Direction Fwd" and "Rocrail Direction Fwd" to a simple button as well as "Rocrail Back" to get back from loco control mode to loco list mode.
+- Assign "Forward" and "Reverse" to a simple button as well as "Back" to get back from loco control mode (Throttle view) to loco list mode.
 
-- Assign "Rocrail List Scroll Dial" to a dial button to be able to scroll through functions in loco control mode.
+- Assign "List Scroll Dial" to a dial button to be able to scroll through functions in loco control mode.
 
 ![Configuration of Ajazz AKP03E](docs/screenshots/configuration.jpg)
 
