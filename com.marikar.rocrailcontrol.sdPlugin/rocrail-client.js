@@ -533,8 +533,8 @@ function parseLcList(xml) {
         V_max: parseInt(attrs.V_max, 10) || 0,
         V_realkmh: parseInt(attrs.V_realkmh, 10) || 0,
         Vmaxkmh: parseInt(attrs.Vmaxkmh, 10) || 0,
-        mode_auto: attrs.mode_auto || '',
-        mode_halfauto: attrs.mode_halfauto || '',
+        /** Rocrail operating mode: stop, idle, auto, … */
+        mode: attrs.mode || '',
       });
     }
   }

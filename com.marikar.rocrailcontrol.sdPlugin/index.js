@@ -1145,22 +1145,18 @@ class RocrailPlugin {
   }
 
   /**
-   * Apply the global "Displayed locos" filter: hide locos running in automatic
-   * (`mode_auto="auto"`) and optionally half‑automatic (`mode_halfauto="halfauto"`) mode.
+   * Apply the global "Displayed locos" filter.
+   * - `all`: every loco from the Rocrail list
+   * - `noauto`: hide locos with `mode="auto"` (legacy `noautohalf` is treated the same)
    */
   _filterDisplayedLocos(locos) {
     if (!Array.isArray(locos)) return [];
-    const mode = this.globalSettings.displayedLocos || 'all';
-    if (mode === 'all') return locos;
-    return locos.filter((l) => {
-      const isAuto = String(l?.mode_auto ?? '').trim().toLowerCase() === 'auto';
-      if (isAuto) return false;
-      if (mode === 'noautohalf') {
-        const isHalfAuto = String(l?.mode_halfauto ?? '').trim().toLowerCase() === 'halfauto';
-        if (isHalfAuto) return false;
-      }
-      return true;
-    });
+    const setting = this.globalSettings.displayedLocos || 'all';
+    if (setting === 'all') return locos;
+    if (setting === 'noauto' || setting === 'noautohalf') {
+      return locos.filter((l) => String(l?.mode ?? '').trim().toLowerCase() !== 'auto');
+    }
+    return locos;
   }
 
   async onScroll(delta, deviceId) {

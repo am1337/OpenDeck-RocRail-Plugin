@@ -29,7 +29,6 @@
     <select id="displayedLocos">
       <option value="all">All locos</option>
       <option value="noauto">No locos in auto mode</option>
-      <option value="noautohalf">No locos in auto or half-auto mode</option>
     </select>
     <label>Scroll when rotating OLED dial, speed dial (list mode), or list-scroll encoder</label>
     <select id="locoListDialScroll">
@@ -114,7 +113,8 @@
           document.getElementById('httpBasePath').value = s.httpBasePath || '/';
           document.getElementById('httpIconBasePath').value = s.httpIconBasePath || '';
           document.getElementById('accessorySvgBasePath').value = s.accessorySvgBasePath || '';
-          document.getElementById('displayedLocos').value = s.displayedLocos || 'all';
+          document.getElementById('displayedLocos').value =
+            s.displayedLocos === 'noauto' || s.displayedLocos === 'noautohalf' ? 'noauto' : 'all';
           document.getElementById('locoListDialScroll').value = dialScrollFromSaved(s.locoListDialScroll);
         }
         if (msg.event === 'didReceiveSettings') {
