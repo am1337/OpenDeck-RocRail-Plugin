@@ -61,6 +61,37 @@ function rocrailAttrBool(v) {
   return s === 'true' || s === '1' || s === 'on' || s === 'yes';
 }
 
+/** True when Rocrail controls this loco in km/h (`V` / `V_max` are km/h, not percent). */
+export function isLocoKmhMode(loco) {
+  const mode = String(loco?.V_mode ?? loco?.rawAttrs?.V_mode ?? 'percent')
+    .trim()
+    .toLowerCase();
+  return mode === 'kmh' || mode === 'km/h';
+}
+
+/**
+ * Max settable speed for dial / buttons: Rocrail `V_max` (km/h or %), with `Vmaxkmh` as km/h fallback.
+ */
+export function locoVMax(loco) {
+  const rawMax = parseInt(String(loco?.V_max ?? loco?.rawAttrs?.V_max ?? ''), 10);
+  if (Number.isFinite(rawMax) && rawMax > 0) {
+    return isLocoKmhMode(loco) ? rawMax : Math.min(100, rawMax);
+  }
+  if (isLocoKmhMode(loco)) {
+    const vmaxkmh = parseInt(String(loco?.Vmaxkmh ?? loco?.rawAttrs?.Vmaxkmh ?? ''), 10);
+    if (Number.isFinite(vmaxkmh) && vmaxkmh > 0) return vmaxkmh;
+    return 120;
+  }
+  return 100;
+}
+
+/** Clamp commanded `V` to `0 … locoVMax(loco)`. */
+export function clampLocoVelocity(loco, v) {
+  const n = parseInt(String(v), 10);
+  const val = Number.isFinite(n) ? n : 0;
+  return Math.max(0, Math.min(locoVMax(loco), val));
+}
+
 /**
  * True if locomotive function `fnIndex` (0–32) is on, using top-level `locoProps` and/or `rawAttrs`.
  * Falls back to Rocrail's catalog status fields `fn` (F0/lights) and `fx` (bitmask for F1+).
@@ -139,10 +170,25 @@ function mergeLcMotionAttrsFromAttrMap(locoProps, attrs) {
   if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
 
   if (Object.prototype.hasOwnProperty.call(attrs, 'V')) {
-    const v = Math.max(0, Math.min(100, parseInt(String(attrs.V), 10) || 0));
+    // Do not clamp to 100: in km/h mode `V` can exceed 100 (limited by V_max when commanding).
+    const v = Math.max(0, parseInt(String(attrs.V), 10) || 0);
     if (locoProps.V !== v) updated = true;
     locoProps.V = v;
     locoProps.rawAttrs.V = String(v);
+  }
+  if (Object.prototype.hasOwnProperty.call(attrs, 'V_max')) {
+    const vmax = parseInt(String(attrs.V_max), 10) || 0;
+    if (vmax > 0) {
+      if (locoProps.V_max !== vmax) updated = true;
+      locoProps.V_max = vmax;
+      locoProps.rawAttrs.V_max = String(vmax);
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(attrs, 'V_mode')) {
+    const mode = String(attrs.V_mode);
+    if (locoProps.V_mode !== mode) updated = true;
+    locoProps.V_mode = mode;
+    locoProps.rawAttrs.V_mode = mode;
   }
   if (Object.prototype.hasOwnProperty.call(attrs, 'V_realkmh')) {
     const rk = parseInt(String(attrs.V_realkmh), 10) || 0;
@@ -484,6 +530,7 @@ function parseLcList(xml) {
         fncnt: parseInt(attrs.fncnt, 10) || 4,
         V_mode: attrs.V_mode || 'percent',
         V: parseInt(attrs.V, 10) ?? -1,
+        V_max: parseInt(attrs.V_max, 10) || 0,
         V_realkmh: parseInt(attrs.V_realkmh, 10) || 0,
         Vmaxkmh: parseInt(attrs.Vmaxkmh, 10) || 0,
         mode_auto: attrs.mode_auto || '',
@@ -547,6 +594,7 @@ function parseLcProps(xml, preferredId = null) {
     fncnt: parseInt(attrs.fncnt, 10) || 4,
     V_mode: attrs.V_mode || 'percent',
     V: parseInt(attrs.V, 10) ?? 0,
+    V_max: parseInt(attrs.V_max, 10) || 0,
     V_realkmh: parseInt(attrs.V_realkmh, 10) || 0,
     Vmaxkmh: parseInt(attrs.Vmaxkmh, 10) || 0,
     fundefs: fundefs.filter((f) => !f.hide && !f.disable).sort((a, b) => a.fn - b.fn),
@@ -1025,7 +1073,7 @@ export class RocrailClient {
     return parseLcProps(res.body, locoId);
   }
 
-  // Send V as percent (0-100) when V_mode is "percent".
+  // Send V in the loco's mode units: percent (0…V_max) or km/h (0…V_max).
   async setVelocity(locoId, V) {
     const id = escapeXmlAttr(locoId);
     const msg = `<lc id="${id}" V="${Math.max(0, V)}" cmd="velocity" throttleid="${this.throttleId}"/>`;
@@ -1083,13 +1131,9 @@ export class RocrailClient {
 
   formatSpeed(loco) {
     if (!loco) return '---';
-    if (loco.V_mode === 'kmh' && loco.V_realkmh != null) {
-      return `${loco.V_realkmh} km/h`;
-    }
-    if (loco.Vmaxkmh > 0 && loco.V_realkmh != null) {
-      return `${loco.V_realkmh} km/h`;
-    }
-    const pct = Math.max(0, Math.min(100, parseInt(loco.V ?? 0, 10) || 0));
-    return `${pct}%`;
+    // Commanded `V` in mode units — not RailCom `V_realkmh` (lags / interpolates).
+    const v = clampLocoVelocity(loco, loco.V ?? 0);
+    if (isLocoKmhMode(loco)) return `${v} km/h`;
+    return `${v}%`;
   }
 }

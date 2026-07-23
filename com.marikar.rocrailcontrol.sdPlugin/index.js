@@ -10,8 +10,10 @@ import {
   CONTROLLABLE_ACCESSORY_KINDS,
   RocrailClient,
   accessoryThemeIconFile,
+  clampLocoVelocity,
   ingestAccessoryXmlIntoCache,
   ingestLcFnXmlIntoCaches,
+  isLocoKmhMode,
   lookupAccessoryEntry,
   lookupLocoFnCacheSlice,
   mergeLcOrFnAttrsIntoLocoProps,
@@ -243,9 +245,13 @@ function syncLcThrottleIntoRawAttrs(locoProps) {
   if (!locoProps.rawAttrs || typeof locoProps.rawAttrs !== 'object') locoProps.rawAttrs = {};
   const raw = locoProps.rawAttrs;
   raw.dir = locoProps.dir === true ? 'true' : 'false';
-  const vPct = Math.max(0, Math.min(100, parseInt(String(locoProps.V ?? raw.V ?? '0'), 10) || 0));
-  locoProps.V = vPct;
-  raw.V = String(vPct);
+  const vCmd = clampLocoVelocity(locoProps, locoProps.V ?? raw.V ?? 0);
+  locoProps.V = vCmd;
+  raw.V = String(vCmd);
+  if (locoProps.V_mode != null) raw.V_mode = String(locoProps.V_mode);
+  if (locoProps.V_max != null && `${locoProps.V_max}`.trim() !== '') {
+    raw.V_max = String(locoProps.V_max);
+  }
   if (locoProps.V_realkmh != null && `${locoProps.V_realkmh}`.trim() !== '') {
     const rk = `${parseInt(String(locoProps.V_realkmh), 10) || 0}`;
     locoProps.V_realkmh = rk;
@@ -1034,17 +1040,19 @@ class RocrailPlugin {
       return;
     }
     // Fold ticks that arrive during setVelocity so we send the latest V and refresh once.
+    // One tick = ±5 in the loco's mode units (% or km/h), clamped to V_max.
     while ((st._pendingSpeedDialTicks || 0) !== 0) {
       const ticks = st._pendingSpeedDialTicks;
       st._pendingSpeedDialTicks = 0;
-      const v = (parseInt(st.locoProps?.V ?? 0, 10) || 0) + ticks * 5;
-      const vPct = Math.max(0, Math.min(100, v));
       st.locoProps = st.locoProps || {};
-      st.locoProps.V = vPct;
+      const v = (parseInt(st.locoProps.V ?? 0, 10) || 0) + ticks * 5;
+      const vCmd = clampLocoVelocity(st.locoProps, v);
+      st.locoProps.V = vCmd;
       syncLcThrottleIntoRawAttrs(st.locoProps);
-      this._armLocalVelocityGuard(st, vPct);
-      this.log(`set speed loco=${st.selectedLoco.id} V=${vPct} device=${deviceId}`);
-      await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
+      this._armLocalVelocityGuard(st, vCmd);
+      const unit = isLocoKmhMode(st.locoProps) ? 'km/h' : '%';
+      this.log(`set speed loco=${st.selectedLoco.id} V=${vCmd}${unit} device=${deviceId}`);
+      await this.rocrail.setVelocity(st.selectedLoco.id, vCmd);
     }
     await this.refreshOledsForDevice(deviceId);
   }
@@ -1082,10 +1090,10 @@ class RocrailPlugin {
     await st._speedDialFlush;
   }
 
-  /** Remember commanded percent so late Rocrail `<lc>` echoes cannot roll the OLED back. */
-  _armLocalVelocityGuard(st, vPct) {
+  /** Remember commanded V so late Rocrail `<lc>` echoes cannot roll the OLED back. */
+  _armLocalVelocityGuard(st, vCmd) {
     if (!st) return;
-    st._velocityGuardV = Math.max(0, Math.min(100, parseInt(String(vPct), 10) || 0));
+    st._velocityGuardV = Math.max(0, parseInt(String(vCmd), 10) || 0);
     st._velocityGuardUntil = Date.now() + 500;
   }
 
@@ -1097,7 +1105,7 @@ class RocrailPlugin {
     if (!st?.locoProps) return false;
     if (!st._velocityGuardUntil || Date.now() >= st._velocityGuardUntil) return false;
     if (st._velocityGuardV == null) return false;
-    const cur = Math.max(0, Math.min(100, parseInt(String(st.locoProps.V ?? 0), 10) || 0));
+    const cur = Math.max(0, parseInt(String(st.locoProps.V ?? 0), 10) || 0);
     if (cur === st._velocityGuardV) {
       // Server caught up — drop the guard early.
       st._velocityGuardUntil = 0;
@@ -1715,13 +1723,15 @@ class RocrailPlugin {
     const d = this._deviceId(deviceId);
     const st = this.getDeviceState(d);
     const show = !!st.selectedLoco;
+    const kmh = show && isLocoKmhMode(st.locoProps || st.selectedLoco);
+    const stepLabel = kmh ? 'km/h' : '%';
     for (const [ctx, info] of this.simpleContexts) {
       if (info.device !== d) continue;
       if (info.type === 'dirfwd') this.setTitle(ctx, show ? 'Fwd →' : '');
       if (info.type === 'dirrev') this.setTitle(ctx, show ? '← Rev' : '');
-      if (info.type === 'stoploco') this.setTitle(ctx, show ? 'Stop 0%' : '');
-      if (info.type === 'speedplus') this.setTitle(ctx, show ? '+5 %' : '');
-      if (info.type === 'speedminus') this.setTitle(ctx, show ? '-5 %' : '');
+      if (info.type === 'stoploco') this.setTitle(ctx, show ? (kmh ? 'Stop 0' : 'Stop 0%') : '');
+      if (info.type === 'speedplus') this.setTitle(ctx, show ? `+5 ${stepLabel}` : '');
+      if (info.type === 'speedminus') this.setTitle(ctx, show ? `-5 ${stepLabel}` : '');
     }
   }
 
