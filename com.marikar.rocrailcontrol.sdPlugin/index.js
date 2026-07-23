@@ -116,6 +116,15 @@ function defaultDeviceState() {
     locoScroll: 0,
     /** First visible function index when paging on OLED keys (throttle view). */
     fnScroll: 0,
+    /** Coalesced dial ticks (±) waiting to be applied as one velocity command. */
+    _pendingSpeedDialTicks: 0,
+    /** Serializes speed dial / bump / stop so parallel OpenDeck events cannot race. */
+    _speedDialFlush: null,
+    /** Monotonic token: stale refreshOledsForDevice runs must not call setImage. */
+    _oledRefreshGen: 0,
+    /** Last locally commanded V%; ignores older Rocrail `<lc>` echoes while active. */
+    _velocityGuardV: null,
+    _velocityGuardUntil: 0,
   };
 }
 
@@ -1010,13 +1019,33 @@ class RocrailPlugin {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
-    const v = (parseInt(st.locoProps?.V ?? 0, 10) || 0) + delta * 5;
-    const vPct = Math.max(0, Math.min(100, v));
-    st.locoProps = st.locoProps || {};
-    st.locoProps.V = vPct;
-    syncLcThrottleIntoRawAttrs(st.locoProps);
-    this.log(`set speed loco=${st.selectedLoco.id} V=${vPct} device=${deviceId}`);
-    await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
+    // OpenDeck fires dialrotate concurrently (void handleMessage); coalesce ticks + serialize apply.
+    st._pendingSpeedDialTicks = (st._pendingSpeedDialTicks || 0) + delta;
+    st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
+      .catch(() => {})
+      .then(() => this._flushPendingSpeedDial(deviceId));
+    await st._speedDialFlush;
+  }
+
+  async _flushPendingSpeedDial(deviceId) {
+    const st = this.getDeviceState(deviceId);
+    if (!st.selectedLoco || !this.rocrail) {
+      st._pendingSpeedDialTicks = 0;
+      return;
+    }
+    // Fold ticks that arrive during setVelocity so we send the latest V and refresh once.
+    while ((st._pendingSpeedDialTicks || 0) !== 0) {
+      const ticks = st._pendingSpeedDialTicks;
+      st._pendingSpeedDialTicks = 0;
+      const v = (parseInt(st.locoProps?.V ?? 0, 10) || 0) + ticks * 5;
+      const vPct = Math.max(0, Math.min(100, v));
+      st.locoProps = st.locoProps || {};
+      st.locoProps.V = vPct;
+      syncLcThrottleIntoRawAttrs(st.locoProps);
+      this._armLocalVelocityGuard(st, vPct);
+      this.log(`set speed loco=${st.selectedLoco.id} V=${vPct} device=${deviceId}`);
+      await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
+    }
     await this.refreshOledsForDevice(deviceId);
   }
 
@@ -1024,26 +1053,59 @@ class RocrailPlugin {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
-    const v = (parseInt(st.locoProps?.V ?? 0, 10) || 0) + deltaPct;
-    const vPct = Math.max(0, Math.min(100, v));
-    st.locoProps = st.locoProps || {};
-    st.locoProps.V = vPct;
-    syncLcThrottleIntoRawAttrs(st.locoProps);
-    this.log(`adjust speed ±% loco=${st.selectedLoco.id} delta=${deltaPct} V=${vPct} device=${deviceId}`);
-    await this.rocrail.setVelocity(st.selectedLoco.id, vPct);
-    await this.refreshOledsForDevice(deviceId);
+    // ±5% buttons share the dial queue (one tick ≡ 5%).
+    st._pendingSpeedDialTicks = (st._pendingSpeedDialTicks || 0) + Math.round(deltaPct / 5);
+    st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
+      .catch(() => {})
+      .then(() => this._flushPendingSpeedDial(deviceId));
+    await st._speedDialFlush;
   }
 
   async onSpeedStop(deviceId) {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
-    st.locoProps = st.locoProps || {};
-    st.locoProps.V = 0;
+    st._pendingSpeedDialTicks = 0;
+    st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
+      .catch(() => {})
+      .then(async () => {
+        if (!st.selectedLoco || !this.rocrail) return;
+        st._pendingSpeedDialTicks = 0;
+        st.locoProps = st.locoProps || {};
+        st.locoProps.V = 0;
+        syncLcThrottleIntoRawAttrs(st.locoProps);
+        this._armLocalVelocityGuard(st, 0);
+        this.log(`stop loco=${st.selectedLoco.id} (V=0) device=${deviceId}`);
+        await this.rocrail.stopLoco(st.selectedLoco.id);
+        await this.refreshOledsForDevice(deviceId);
+      });
+    await st._speedDialFlush;
+  }
+
+  /** Remember commanded percent so late Rocrail `<lc>` echoes cannot roll the OLED back. */
+  _armLocalVelocityGuard(st, vPct) {
+    if (!st) return;
+    st._velocityGuardV = Math.max(0, Math.min(100, parseInt(String(vPct), 10) || 0));
+    st._velocityGuardUntil = Date.now() + 500;
+  }
+
+  /**
+   * While a local velocity command is in flight, keep `locoProps.V` at the commanded value.
+   * Function bits / direction from the same push still apply.
+   */
+  _restoreLocalVelocityGuardIfNeeded(st) {
+    if (!st?.locoProps) return false;
+    if (!st._velocityGuardUntil || Date.now() >= st._velocityGuardUntil) return false;
+    if (st._velocityGuardV == null) return false;
+    const cur = Math.max(0, Math.min(100, parseInt(String(st.locoProps.V ?? 0), 10) || 0));
+    if (cur === st._velocityGuardV) {
+      // Server caught up — drop the guard early.
+      st._velocityGuardUntil = 0;
+      return false;
+    }
+    st.locoProps.V = st._velocityGuardV;
     syncLcThrottleIntoRawAttrs(st.locoProps);
-    this.log(`stop loco=${st.selectedLoco.id} (V=0) device=${deviceId}`);
-    await this.rocrail.stopLoco(st.selectedLoco.id);
-    await this.refreshOledsForDevice(deviceId);
+    return true;
   }
 
   async onBack(deviceId) {
@@ -1291,6 +1353,8 @@ class RocrailPlugin {
       const st = this.getDeviceState(deviceId);
       if (st.view !== View.THROTTLE || !st.selectedLoco?.id || !st.locoProps) continue;
       if (mergeLcOrFnAttrsIntoLocoProps(st.locoProps, body, st.selectedLoco.id)) {
+        // Late velocity echoes from rapid dial must not overwrite the commanded V on the OLED.
+        this._restoreLocalVelocityGuardIfNeeded(st);
         syncLcThrottleIntoRawAttrs(st.locoProps);
         touchedThrottle = true;
         syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
@@ -1493,11 +1557,14 @@ class RocrailPlugin {
   async refreshOledsForDevice(deviceId) {
     this._normalizeScrollPositionsForDevice(deviceId);
     const st = this.getDeviceState(deviceId);
+    const gen = (st._oledRefreshGen = (st._oledRefreshGen || 0) + 1);
+    const stillCurrent = () => st._oledRefreshGen === gen;
     const entries = this.getOledEntriesForDevice(deviceId);
     const compositeFontPx = this._effectiveOledTextFontPx();
 
     if (st.view === View.LOCO_LIST) {
       for (let i = 0; i < entries.length; i++) {
+        if (!stillCurrent()) return;
         const [ctx] = entries[i];
         const loco = this.locos[st.locoScroll + i];
         if (!loco) {
@@ -1516,6 +1583,7 @@ class RocrailPlugin {
         }
 
         const dataUri = await this._loadLocoImageDataUri(loco, compositeFontPx);
+        if (!stillCurrent()) return;
         if (dataUri) {
           this.setImage(ctx, dataUri);
           this.setTitle(ctx, '');
@@ -1546,9 +1614,8 @@ class RocrailPlugin {
           '',
       };
 
-      const speedLbl = this.rocrail ? this.rocrail.formatSpeed(st.locoProps) : '---';
-
       for (let i = 0; i < entries.length; i++) {
+        if (!stillCurrent()) return;
         const [ctx] = entries[i];
         const tv = this._throttleViewForOledContext(ctx);
 
@@ -1561,6 +1628,7 @@ class RocrailPlugin {
             continue;
           }
           const dataUri = await this._loadLocoImageDataUri(locMerged, compositeFontPx);
+          if (!stillCurrent()) return;
           if (dataUri) {
             this.setImage(ctx, dataUri);
             this.setTitle(ctx, '');
@@ -1575,18 +1643,23 @@ class RocrailPlugin {
         }
 
         if (isSpeedFamilyThrottleView(tv)) {
+          // Re-read label right before render so coalesced dial updates are not painted stale.
+          const speedLbl = this.rocrail ? this.rocrail.formatSpeed(st.locoProps) : '---';
+          const dirFwd = st.locoProps.dir === true;
           try {
             const png = await renderThrottleSpeedDirPng(
               speedLbl,
-              st.locoProps.dir === true,
+              dirFwd,
               undefined,
               compositeFontPx,
               speedTileRenderMode(tv)
             );
+            if (!stillCurrent()) return;
             const uri = `data:image/png;base64,${png.toString('base64')}`;
             this.setImage(ctx, uri);
           } catch (e) {
             this.log(`throttle speed key render failed: ${e?.message || String(e)}`);
+            if (!stillCurrent()) return;
             this.setImage(ctx, null);
           }
           this.setTitle(ctx, '');
@@ -1610,6 +1683,7 @@ class RocrailPlugin {
         }
         const on = rocrailFnIsActive(st.locoProps, def.fn);
         const iconUri = def.icon ? await this._loadFunctionIconDataUri(def.icon, on) : null;
+        if (!stillCurrent()) return;
         if (iconUri) {
           this.setImage(ctx, iconUri);
           this.setTitle(ctx, '');
@@ -1620,11 +1694,14 @@ class RocrailPlugin {
         // font size only takes effect for image-rendered text.
         try {
           const png = await renderFunctionLabelPng(def.text || `F${def.fn}`, on, undefined, compositeFontPx);
+          if (!stillCurrent()) return;
           this.setImage(ctx, `data:image/png;base64,${png.toString('base64')}`);
           this.setTitle(ctx, '');
         } catch (e) {
           this.log(`fn label tile render failed: ${e?.message || String(e)}`);
+          if (!stillCurrent()) return;
           const uri = on ? await getFnKeyOnBackgroundDataUri() : await getFnKeyOffBackgroundDataUri();
+          if (!stillCurrent()) return;
           this.setImage(ctx, uri);
           this.setTitle(ctx, wrapFnLabel(def.text || `F${def.fn}`, 9, 4));
           this._setTitleParametersMaybe(ctx);
