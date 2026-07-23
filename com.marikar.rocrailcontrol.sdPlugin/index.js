@@ -146,9 +146,15 @@ function wrapFnLabel(text, maxCharsPerLine, maxLines) {
   return lines.join('\n');
 }
 
+/**
+ * Highest list index that may be shown on the first OLED of a page.
+ * Pages are non-overlapping multiples of `pageSize` (0, pageSize, 2·pageSize, …).
+ * The last page may be short; remaining OLED slots stay empty (no wrap-fill from list start).
+ */
 function listMaxScrollStart(listLen, pageSize) {
   const ps = Math.max(1, pageSize);
-  return Math.max(0, listLen - ps);
+  if (listLen <= ps) return 0;
+  return Math.floor((listLen - 1) / ps) * ps;
 }
 
 /** True when the list is longer than one OLED page (scrolling / wrap applies). */
@@ -158,7 +164,7 @@ function listCanScroll(listLen, pageSize) {
 
 /**
  * Cyclic scroll index: when the list fits on one page, always 0.
- * Otherwise `current + delta` wrapped to `0 … listMaxScrollStart`.
+ * Otherwise `current + delta` wrapped to `0 … listMaxScrollStart` (past the short last page → first page).
  */
 function applyWrappedListScroll(current, delta, listLen, pageSize) {
   const ps = Math.max(1, pageSize);
@@ -169,7 +175,10 @@ function applyWrappedListScroll(current, delta, listLen, pageSize) {
   return ((v % n) + n) % n;
 }
 
-/** First index of each scrolled "page": 0, visibleSlots, …, ending at listMaxScrollStart (short final page when len is not a multiple). */
+/**
+ * First index of each scrolled page: 0, visibleSlots, 2·visibleSlots, …, listMaxScrollStart.
+ * Last page may have fewer items than visibleSlots (empty OLED slots).
+ */
 function listPageScrollAnchors(listLen, visibleSlots) {
   const vs = Math.max(1, visibleSlots);
   if (listLen <= 0) return [0];
@@ -193,15 +202,18 @@ function anchorIndexAtOrBelow(anchors, scrollPos) {
 }
 
 /**
- * "One page per dial step": advance by whole page boundaries (fixes unreachable last partial page vs raw index+delta modulo).
+ * "One page per dial step": advance by whole page boundaries.
+ * Past the last (possibly short) page wraps to the first page starting at index 0.
  * @param {number} pageTurnTicks Encoder delta (positive/negative), one tick → next/prev anchor.
  */
 function advanceListScrollByPageTicks(currentScroll, pageTurnTicks, listLen, visibleSlots) {
   const vs = Math.max(1, visibleSlots);
   const anchors = listPageScrollAnchors(listLen, vs);
   const nAnch = anchors.length;
-  if (nAnch <= 1 || pageTurnTicks === 0) return Math.min(Math.max(0, currentScroll), Math.max(0, listLen - vs));
   const maxStart = listMaxScrollStart(listLen, vs);
+  if (nAnch <= 1 || pageTurnTicks === 0) {
+    return Math.min(Math.max(0, currentScroll), maxStart);
+  }
   const clamped = Math.min(Math.max(0, currentScroll), maxStart);
   let idx = anchorIndexAtOrBelow(anchors, clamped);
   idx = ((idx + pageTurnTicks) % nAnch + nAnch) % nAnch;
@@ -1662,7 +1674,15 @@ class RocrailPlugin {
     if (st.view === View.LOCO_LIST) {
       const len = this.locos.length;
       if (!listCanScroll(len, oledCount)) st.locoScroll = 0;
-      else st.locoScroll = Math.min(st.locoScroll, listMaxScrollStart(len, oledCount));
+      else {
+        const maxStart = listMaxScrollStart(len, oledCount);
+        st.locoScroll = Math.min(Math.max(0, st.locoScroll), maxStart);
+        // Page mode: snap to a real page start so leftover mid-window offsets cannot show the wrong loco on OLED 0.
+        if (this._isLocoListDialPageMode()) {
+          const anchors = listPageScrollAnchors(len, oledCount);
+          st.locoScroll = anchors[anchorIndexAtOrBelow(anchors, st.locoScroll)];
+        }
+      }
     } else if (st.view === View.THROTTLE && st.selectedLoco) {
       const fnSlotsCount = this._countThrottleFunctionOledSlots(deviceId);
       if (fnSlotsCount < 1) st.fnScroll = 0;
@@ -1670,7 +1690,14 @@ class RocrailPlugin {
         const defs = functionDefsForDisplay(st.locoProps, st.selectedLoco);
         const len = defs.length;
         if (!listCanScroll(len, fnSlotsCount)) st.fnScroll = 0;
-        else st.fnScroll = Math.min(st.fnScroll, listMaxScrollStart(len, fnSlotsCount));
+        else {
+          const maxStart = listMaxScrollStart(len, fnSlotsCount);
+          st.fnScroll = Math.min(Math.max(0, st.fnScroll), maxStart);
+          if (this._isLocoListDialPageMode()) {
+            const anchors = listPageScrollAnchors(len, fnSlotsCount);
+            st.fnScroll = anchors[anchorIndexAtOrBelow(anchors, st.fnScroll)];
+          }
+        }
       }
     }
   }
