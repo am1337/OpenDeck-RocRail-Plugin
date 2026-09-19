@@ -5,7 +5,6 @@
  * PNGs are cached on disk; cache key changes when loco id, label, font size, or source image bytes change.
  */
 
-import sharp from 'sharp';
 import crypto from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
@@ -13,6 +12,32 @@ import { fileURLToPath } from 'url';
 import { accessoryOriRotationCw } from './rocrail-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// sharp ships per-platform native binaries; if the package was installed without the
+// matching one (or a broken mix of versions), importing it throws. Keep the plugin
+// alive in that case so it can still register and surface the problem on the keys.
+let sharpImpl = null;
+let sharpLoadError = null;
+try {
+  ({ default: sharpImpl } = await import('sharp'));
+} catch (err) {
+  sharpLoadError = err;
+}
+
+export function isSharpAvailable() {
+  return sharpImpl != null;
+}
+
+export function getSharpLoadError() {
+  return sharpLoadError;
+}
+
+const sharp = (...args) => {
+  if (sharpImpl == null) {
+    throw new Error(`sharp unavailable: ${sharpLoadError?.message ?? 'module failed to load'}`);
+  }
+  return sharpImpl(...args);
+};
 
 /** Direction arrow glyphs (monochrome SVGs) reused on speed/direction throttle tiles. */
 const DIRECTION_ARROW_SVG = {

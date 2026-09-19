@@ -22,7 +22,7 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 
 - [OpenDeck](https://github.com/nekename/OpenDeck)
 - [Rocrail](https://wiki.rocrail.net) running with client access (**Client Service**, default port **8051**) and http access (**Rocweb**, default port **8080**)
-- Node.js **20 or newer**
+- Node.js **20 or newer** (If missing, please install it. A restart afterwards might be necessary)
 
 ## Build (optional)
 

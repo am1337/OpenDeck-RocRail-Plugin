@@ -2,7 +2,7 @@
   "SDKVersion": 2,
   "Name": "RocRail Client",
   "Author": "Achim Marikar",
-  "Version": "1.0.0",
+  "Version": "1.0.1",
   "Description": "Plugin for OpenDeck that connects to RocRail and enables to control your model train via stream deck",
   "Icon": "icon",
   "Category": "Rocrail",

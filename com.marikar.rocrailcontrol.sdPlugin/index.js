@@ -27,6 +27,8 @@ import {
   DEFAULT_OLED_TEXT_FONT_PX,
   MAX_OLED_TEXT_FONT_PX,
   formatLocoDisplayName,
+  getSharpLoadError,
+  isSharpAvailable,
   getCachedCompositePng,
   getCachedFunctionIconPng,
   getFnKeyOffBackgroundDataUri,
@@ -505,6 +507,14 @@ class RocrailPlugin {
           uuid: this.pluginUUID,
         });
         this.log(`registered plugin uuid=${this.pluginUUID} registerEvent=${this.registerEvent}`);
+        if (!isSharpAvailable()) {
+          this.log(
+            `sharp image library not available — key images will not render. ` +
+              `Cause: ${getSharpLoadError()?.message ?? 'unknown'}. ` +
+              `Fix: delete the plugin's node_modules folder and run "npm ci" inside the plugin directory, ` +
+              `or reinstall the plugin.`
+          );
+        }
         resolve();
       });
       this.ws.on('message', (data) => {
@@ -587,6 +597,10 @@ class RocrailPlugin {
     this.send({ event: 'setState', context, payload: { state, target } });
   }
 
+  showAlert(context) {
+    this.send({ event: 'showAlert', context });
+  }
+
   async handleMessage(rawMsg) {
     const msg = coerceInboundPluginMessage(rawMsg);
     const { event, action, context, device, payload } = msg;
@@ -659,6 +673,14 @@ class RocrailPlugin {
     }
 
     if (evNorm === 'willappear') {
+      if (!isSharpAvailable() && context != null) {
+        // Surface broken/missing sharp on the key itself instead of only in the log.
+        this.showAlert(context);
+        this.send({
+          event: 'logMessage',
+          payload: { message: `sharp unavailable: ${getSharpLoadError()?.message ?? 'unknown'}` },
+        });
+      }
       if (action === OLED_ACTION) {
         this.oledContexts.set(context, { row: coordinates.row, column: coordinates.column, device: deviceId });
         if (payload?.settings != null && typeof payload.settings === 'object') {
