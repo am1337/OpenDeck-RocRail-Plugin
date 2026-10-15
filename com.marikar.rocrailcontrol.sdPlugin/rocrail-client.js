@@ -43,12 +43,21 @@ function parseXmlHeader(buffer) {
   };
 }
 
+function unescapeXmlAttr(s) {
+  return String(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 function parseAttrs(str) {
   const attrs = {};
   const regex = /(\w+)=["']([^"']*)["']/g;
   let m;
   while ((m = regex.exec(str)) !== null) {
-    attrs[m[1]] = m[2];
+    attrs[m[1]] = unescapeXmlAttr(m[2]);
   }
   return attrs;
 }
@@ -900,6 +909,7 @@ export class RocrailClient {
         reject(new Error('socket closed before connect'));
         while (this._pending.length) {
           const p = this._pending.shift();
+          clearTimeout(p?.timer);
           p?.reject?.(new Error('Socket closed'));
         }
         this.onClose?.();
@@ -972,6 +982,7 @@ export class RocrailClient {
         continue;
       }
       this._pending.shift();
+      clearTimeout(head.timer);
       head.resolve({ name: info.name, body });
     }
   }
@@ -994,7 +1005,18 @@ export class RocrailClient {
           return;
         }
         if (expectResponse) {
-          this._pending.push({ resolve, reject, matchBody, waitKind, locoId });
+          const entry = { resolve, reject, matchBody, waitKind, locoId };
+          // A reply that never matches (missing loco, renamed id, server quirk) must
+          // not wedge the serialized _ioChain forever — fail it after a timeout.
+          entry.timer = setTimeout(() => {
+            const i = this._pending.indexOf(entry);
+            if (i === -1) return;
+            this._pending.splice(i, 1);
+            this.log(`request timeout waitKind=${waitKind || 'reply'} loco=${locoId || ''}`);
+            reject(new Error(`request timeout (${waitKind || 'reply'})`));
+          }, 15000);
+          entry.timer.unref?.();
+          this._pending.push(entry);
         }
         const msg = buildHeader(xmlMsg, xmlType);
         if (RR_DEBUG) {
@@ -1006,7 +1028,10 @@ export class RocrailClient {
           if (err) {
             if (expectResponse) {
               const p = this._pending.pop();
-              if (p) p.reject(err);
+              if (p) {
+                clearTimeout(p.timer);
+                p.reject(err);
+              }
             } else {
               reject(err);
             }
