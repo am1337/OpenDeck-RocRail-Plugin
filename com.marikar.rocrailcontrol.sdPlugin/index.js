@@ -121,8 +121,8 @@ function defaultDeviceState() {
     locoScroll: 0,
     /** First visible function index when paging on OLED keys (throttle view). */
     fnScroll: 0,
-    /** Coalesced dial ticks (±) waiting to be applied as one velocity command. */
-    _pendingSpeedDialTicks: 0,
+    /** Coalesced speed delta (in loco units, % or km/h) waiting to be applied as one velocity command. */
+    _pendingSpeedDelta: 0,
     /** Serializes speed dial / bump / stop so parallel OpenDeck events cannot race. */
     _speedDialFlush: null,
     /** Monotonic token: stale refreshOledsForDevice runs must not call setImage. */
@@ -279,6 +279,8 @@ class RocrailPlugin {
     this.simpleContexts = new Map();
     /** @type {Map<string, string>} deviceId -> speed dial action context */
     this.dialContextByDevice = new Map();
+    /** @type {Map<string, number>} speed action context -> speed step per dial tick (% or km/h) */
+    this.speedStepByContext = new Map();
     /** @type {Map<string, string>} deviceId -> list scroll encoder action context */
     this.scrollDialContextByDevice = new Map();
     /** @type {Map<string, string>} deviceId -> back action context */
@@ -364,6 +366,23 @@ class RocrailPlugin {
       merged.throttleView = this._normalizeThrottleViewSetting(settings.throttleView);
     }
     this.oledSettingsByContext.set(oledCtx, merged);
+  }
+
+  _mergeSpeedActionSettings(context, settings) {
+    if (context == null || settings == null || typeof settings !== 'object') return;
+    if (!Object.prototype.hasOwnProperty.call(settings, 'speedStep')) return;
+    const n = parseInt(String(settings.speedStep), 10);
+    this.speedStepByContext.set(
+      context,
+      Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : 5
+    );
+  }
+
+  /** Speed dial step for the device, in the loco's speed units (% or km/h). Default 5. */
+  _speedStepForDevice(deviceId) {
+    const ctx = this.dialContextByDevice.get(deviceId);
+    const n = ctx != null ? this.speedStepByContext.get(ctx) : undefined;
+    return Number.isFinite(n) && n >= 1 ? Math.min(100, Math.round(n)) : 5;
   }
 
   _throttleViewForOledContext(oledCtx) {
@@ -664,6 +683,10 @@ class RocrailPlugin {
           payload.settings != null && typeof payload.settings === 'object' ? payload.settings : payload;
         this._mergeAccessorySettings(context, deviceId, rawInst);
         await this.refreshAccessoryContext(context);
+      } else if (action === `${PLUGIN_UUID}.speed` && context != null && payload != null && typeof payload === 'object') {
+        const rawInst =
+          payload.settings != null && typeof payload.settings === 'object' ? payload.settings : payload;
+        if (rawInst && typeof rawInst === 'object') this._mergeSpeedActionSettings(context, rawInst);
       }
       return;
     }
@@ -701,6 +724,9 @@ class RocrailPlugin {
         this.simpleContexts.set(context, { type: 'dirrev', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.speed`) {
         this.dialContextByDevice.set(deviceId, context);
+        if (payload?.settings != null && typeof payload.settings === 'object') {
+          this._mergeSpeedActionSettings(context, payload.settings);
+        }
       } else if (action === `${PLUGIN_UUID}.stoploco`) {
         this.simpleContexts.set(context, { type: 'stoploco', device: deviceId });
       } else if (action === `${PLUGIN_UUID}.speedplus`) {
@@ -733,6 +759,7 @@ class RocrailPlugin {
         this.simpleContexts.delete(context);
       } else if (action === `${PLUGIN_UUID}.speed`) {
         if (this.dialContextByDevice.get(deviceId) === context) this.dialContextByDevice.delete(deviceId);
+        this.speedStepByContext.delete(context);
       } else if (action === `${PLUGIN_UUID}.scroll`) {
         if (this.scrollDialContextByDevice.get(deviceId) === context) this.scrollDialContextByDevice.delete(deviceId);
       } else if (action === `${PLUGIN_UUID}.back`) {
@@ -1058,7 +1085,8 @@ class RocrailPlugin {
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
     // OpenDeck fires dialrotate concurrently (void handleMessage); coalesce ticks + serialize apply.
-    st._pendingSpeedDialTicks = (st._pendingSpeedDialTicks || 0) + delta;
+    st._pendingSpeedDelta =
+      (st._pendingSpeedDelta || 0) + delta * this._speedStepForDevice(deviceId);
     st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
       .catch(() => {})
       .then(() => this._flushPendingSpeedDial(deviceId));
@@ -1068,16 +1096,16 @@ class RocrailPlugin {
   async _flushPendingSpeedDial(deviceId) {
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) {
-      st._pendingSpeedDialTicks = 0;
+      st._pendingSpeedDelta = 0;
       return;
     }
     // Fold ticks that arrive during setVelocity so we send the latest V and refresh once.
-    // One tick = ±5 in the loco's mode units (% or km/h), clamped to V_max.
-    while ((st._pendingSpeedDialTicks || 0) !== 0) {
-      const ticks = st._pendingSpeedDialTicks;
-      st._pendingSpeedDialTicks = 0;
+    // Deltas are in the loco's mode units (% or km/h), clamped to V_max.
+    while ((st._pendingSpeedDelta || 0) !== 0) {
+      const delta = st._pendingSpeedDelta;
+      st._pendingSpeedDelta = 0;
       st.locoProps = st.locoProps || {};
-      const v = (parseInt(st.locoProps.V ?? 0, 10) || 0) + ticks * 5;
+      const v = (parseInt(st.locoProps.V ?? 0, 10) || 0) + delta;
       const vCmd = clampLocoVelocity(st.locoProps, v);
       st.locoProps.V = vCmd;
       syncLcThrottleIntoRawAttrs(st.locoProps);
@@ -1093,8 +1121,8 @@ class RocrailPlugin {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
-    // ±5% buttons share the dial queue (one tick ≡ 5%).
-    st._pendingSpeedDialTicks = (st._pendingSpeedDialTicks || 0) + Math.round(deltaPct / 5);
+    // ±5 buttons keep a fixed 5-percentage-point step, independent of the dial step setting.
+    st._pendingSpeedDelta = (st._pendingSpeedDelta || 0) + Math.round(deltaPct);
     st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
       .catch(() => {})
       .then(() => this._flushPendingSpeedDial(deviceId));
@@ -1105,12 +1133,12 @@ class RocrailPlugin {
     await this.initRocrail(false);
     const st = this.getDeviceState(deviceId);
     if (!st.selectedLoco || !this.rocrail) return;
-    st._pendingSpeedDialTicks = 0;
+    st._pendingSpeedDelta = 0;
     st._speedDialFlush = (st._speedDialFlush || Promise.resolve())
       .catch(() => {})
       .then(async () => {
         if (!st.selectedLoco || !this.rocrail) return;
-        st._pendingSpeedDialTicks = 0;
+        st._pendingSpeedDelta = 0;
         st.locoProps = st.locoProps || {};
         st.locoProps.V = 0;
         syncLcThrottleIntoRawAttrs(st.locoProps);

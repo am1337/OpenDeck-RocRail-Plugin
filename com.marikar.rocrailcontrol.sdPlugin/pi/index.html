@@ -125,6 +125,12 @@
       <option value="directiononly" data-i18n="pi.option.throttleView.directiononly">Direction only</option>
     </select>
   </div>
+  <div id="speedInstanceSection" class="section" style="display: none;">
+    <h3 style="margin: 0 0 8px 0;" data-i18n="pi.section.speed">This Speed dial</h3>
+    <small class="hint" data-i18n-html="pi.hint.speed">Step applied to the loco speed per dial tick. The unit follows the locomotive: percent, or km/h when the loco runs in km/h mode (V_mode). Rotating also scrolls the loco list while no loco is selected; the step only applies in throttle mode.</small>
+    <label data-i18n="pi.label.speedStep">Speed step per dial tick (% or km/h)</label>
+    <input type="number" id="speedStep" min="1" max="100" data-i18n-placeholder="pi.placeholder.speedStep" placeholder="5">
+  </div>
   <div class="section">
     <h3 style="margin: 0 0 8px 0;" data-i18n-html="pi.section.http">Loco images &amp; function icons via HTTP</h3>
     <small class="hint" data-i18n-html="pi.hint.http">Rocview / Rocrail HTTP image service must expose files (Rocview Wiki: web service). Composites download from <code>http://&lt;TCP host above&gt;:port/path/file</code>.</small>
@@ -140,6 +146,7 @@
   <script>
     const PLUGIN_OLED_UUID = 'com.marikar.rocrailcontrol.oled';
     const PLUGIN_ACCESSORY_UUID = 'com.marikar.rocrailcontrol.accessory';
+    const PLUGIN_SPEED_UUID = 'com.marikar.rocrailcontrol.speed';
     let ws, inspectorSocketUuid, actionInstanceUuid, activeActionUuid;
 
     function dialScrollFromSaved(v) {
@@ -267,6 +274,12 @@
             const validKinds = ['sw', 'sg', 'co', 'tt', 'fb', 'bk', 'tk'];
             document.getElementById('accItemType').value = validKinds.includes(ls.itemType) ? ls.itemType : 'auto';
           }
+          if ((msg.action || '') === PLUGIN_SPEED_UUID) {
+            const ls = msg.payload?.settings || {};
+            const n = parseInt(String(ls.speedStep), 10);
+            document.getElementById('speedStep').value =
+              Number.isFinite(n) && n >= 1 ? String(Math.min(100, n)) : '5';
+          }
         }
       };
     }
@@ -276,6 +289,8 @@
         activeActionUuid === PLUGIN_OLED_UUID ? 'block' : 'none';
       document.getElementById('accessoryInstanceSection').style.display =
         activeActionUuid === PLUGIN_ACCESSORY_UUID ? 'block' : 'none';
+      document.getElementById('speedInstanceSection').style.display =
+        activeActionUuid === PLUGIN_SPEED_UUID ? 'block' : 'none';
     }
 
     function saveGlobal() {
@@ -323,6 +338,19 @@
       }));
     }
 
+    function saveSpeed() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !actionInstanceUuid || activeActionUuid !== PLUGIN_SPEED_UUID)
+        return;
+      const n = parseInt(document.getElementById('speedStep').value, 10);
+      ws.send(JSON.stringify({
+        event: 'setSettings',
+        context: actionInstanceUuid,
+        payload: {
+          speedStep: Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : 5,
+        },
+      }));
+    }
+
     document.getElementById('host').addEventListener('change', saveGlobal);
     document.getElementById('port').addEventListener('change', saveGlobal);
     document.getElementById('oledTextFontSize').addEventListener('change', saveGlobal);
@@ -335,6 +363,7 @@
     document.getElementById('throttleView').addEventListener('change', saveThrottleView);
     document.getElementById('accItemId').addEventListener('change', saveAccessory);
     document.getElementById('accItemType').addEventListener('change', saveAccessory);
+    document.getElementById('speedStep').addEventListener('change', saveSpeed);
   </script>
 </body>
 </html>
