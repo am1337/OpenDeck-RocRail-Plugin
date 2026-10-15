@@ -872,30 +872,46 @@ export class RocrailClient {
     this._ioChain = Promise.resolve();
     /** @type {null | ((body: string, xmlName: string) => void)} */
     this.onPush = null;
+    /** @type {null | (() => void)} Called when the TCP socket closes so the plugin can reconnect. */
+    this.onClose = null;
+  }
+
+  get connected() {
+    return this.socket != null && this.socket.writable;
   }
 
   connect() {
     return new Promise((resolve, reject) => {
-      this.socket = new net.Socket();
+      const socket = new net.Socket();
+      this.socket = socket;
       this._buffer = Buffer.alloc(0);
-      this.socket.on('error', (err) => {
+      const connectTimeout = setTimeout(() => socket.destroy(new Error('connect timeout')), 10000);
+      connectTimeout.unref?.();
+      socket.on('error', (err) => {
         this.log(`socket error: ${err?.message || String(err)}`);
         reject(err);
       });
-      this.socket.on('close', (hadError) => {
+      socket.on('close', (hadError) => {
+        clearTimeout(connectTimeout);
         this.log(`socket closed${hadError ? ' (hadError)' : ''}`);
+        if (this.socket === socket) this.socket = null;
+        // No-op once 'connect' resolved; otherwise keeps the promise (and the
+        // serialized init chain) from hanging forever on a stalled connect.
+        reject(new Error('socket closed before connect'));
         while (this._pending.length) {
           const p = this._pending.shift();
           p?.reject?.(new Error('Socket closed'));
         }
+        this.onClose?.();
       });
-      this.socket.on('connect', () => {
+      socket.on('connect', () => {
+        clearTimeout(connectTimeout);
         this.log(`connected to ${this.host}:${this.port}`);
         resolve();
       });
       this.log(`connecting to ${this.host}:${this.port}...`);
-      this.socket.connect(this.port, this.host);
-      this.socket.on('data', (data) => this._onData(data));
+      socket.connect(this.port, this.host);
+      socket.on('data', (data) => this._onData(data));
     });
   }
 

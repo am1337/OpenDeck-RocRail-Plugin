@@ -556,6 +556,10 @@ class RocrailPlugin {
       clearTimeout(this._lcPushRefreshTimer);
       this._lcPushRefreshTimer = null;
     }
+    if (this._rocrailReconnectTimer) {
+      clearTimeout(this._rocrailReconnectTimer);
+      this._rocrailReconnectTimer = null;
+    }
     try {
       this.rocrail?.disconnect();
     } catch (_) {}
@@ -894,62 +898,66 @@ class RocrailPlugin {
 
     if (st.view === View.LOCO_LIST) {
       const loco = this.locos[st.locoScroll + idx];
-      if (loco) {
-        if (this._isLocoLockedByOther(loco.id, deviceId)) {
-          this.log(`select denied: loco=${loco.id} is controlled by another device`);
-          return;
-        }
-
-        this.log(`select loco id=${loco.id} name=${loco.name || ''} device=${deviceId}`);
-
-        if (st.selectedLoco && st.selectedLoco.id !== loco.id && this.rocrail) {
-          const prevId = st.selectedLoco.id;
-          this.log(`switching loco on device=${deviceId}, stopping previous loco=${prevId}`);
-          try {
-            await this.rocrail.stopLoco(prevId);
-          } catch (e) {
-            this.log(`stop previous loco failed loco=${prevId}: ${e?.message || String(e)}`);
-          }
-          try {
-            await this.rocrail.releaseLoco(prevId);
-          } catch (e) {
-            this.log(`release previous loco failed loco=${prevId}: ${e?.message || String(e)}`);
-          }
-          this._clearLocoLockIfOwner(prevId, deviceId);
-        }
-
-        st.selectedLoco = loco;
-        try {
-          await this.rocrail.dispatchLoco(loco.id);
-          this._setLocoLock(loco.id, deviceId);
-          this.log(`dispatched loco=${loco.id} device=${deviceId}`);
-        } catch (e) {
-          this.log(`dispatch failed loco=${loco.id}: ${e?.message || String(e)}`);
-          st.selectedLoco = null;
-          await this.refreshDevice(deviceId);
-          return;
-        }
-        try {
-          st.locoProps = await this.rocrail.getLocoProps(loco.id);
-          const nf = Array.isArray(st.locoProps?.fundefs) ? st.locoProps.fundefs.length : 0;
-          this.log(`lcprops loco=${loco.id} fundefs=${nf} device=${deviceId}`);
-          if (st.locoProps?.id) await this.rocrail.syncLocoFnFromLclist(st.locoProps, this.perLocoFnCacheById);
-          overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
-          syncLcThrottleIntoRawAttrs(st.locoProps);
-          syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
-        } catch (e) {
-          this.log(`lcprops failed loco=${loco.id}: ${e?.message || String(e)}`);
-          // Keep list-row attrs (may include fn/fx); never invent 33× false — that poisons the fn cache.
-          st.locoProps = { ...loco, rawAttrs: { ...(loco.rawAttrs || {}), id: loco.id } };
-          overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
-          syncLcThrottleIntoRawAttrs(st.locoProps);
-          syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
-        }
-        st.fnScroll = 0;
-        st.view = View.THROTTLE;
-        await this.refreshDevice(deviceId);
-        await this.refreshAllDevicesLocoListVisuals();
+      if (!loco) {
+        this.log(
+          `oled press ignored: no loco at idx=${idx} scroll=${st.locoScroll} locos=${this.locos.length} device=${deviceId}`
+        );
+        return;
       }
+      if (this._isLocoLockedByOther(loco.id, deviceId)) {
+        this.log(`select denied: loco=${loco.id} is controlled by another device`);
+        return;
+      }
+
+      this.log(`select loco id=${loco.id} name=${loco.name || ''} device=${deviceId}`);
+
+      if (st.selectedLoco && st.selectedLoco.id !== loco.id && this.rocrail) {
+        const prevId = st.selectedLoco.id;
+        this.log(`switching loco on device=${deviceId}, stopping previous loco=${prevId}`);
+        try {
+          await this.rocrail.stopLoco(prevId);
+        } catch (e) {
+          this.log(`stop previous loco failed loco=${prevId}: ${e?.message || String(e)}`);
+        }
+        try {
+          await this.rocrail.releaseLoco(prevId);
+        } catch (e) {
+          this.log(`release previous loco failed loco=${prevId}: ${e?.message || String(e)}`);
+        }
+        this._clearLocoLockIfOwner(prevId, deviceId);
+      }
+
+      st.selectedLoco = loco;
+      try {
+        await this.rocrail.dispatchLoco(loco.id);
+        this._setLocoLock(loco.id, deviceId);
+        this.log(`dispatched loco=${loco.id} device=${deviceId}`);
+      } catch (e) {
+        this.log(`dispatch failed loco=${loco.id}: ${e?.message || String(e)}`);
+        st.selectedLoco = null;
+        await this.refreshDevice(deviceId);
+        return;
+      }
+      try {
+        st.locoProps = await this.rocrail.getLocoProps(loco.id);
+        const nf = Array.isArray(st.locoProps?.fundefs) ? st.locoProps.fundefs.length : 0;
+        this.log(`lcprops loco=${loco.id} fundefs=${nf} device=${deviceId}`);
+        if (st.locoProps?.id) await this.rocrail.syncLocoFnFromLclist(st.locoProps, this.perLocoFnCacheById);
+        overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
+        syncLcThrottleIntoRawAttrs(st.locoProps);
+        syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
+      } catch (e) {
+        this.log(`lcprops failed loco=${loco.id}: ${e?.message || String(e)}`);
+        // Keep list-row attrs (may include fn/fx); never invent 33× false — that poisons the fn cache.
+        st.locoProps = { ...loco, rawAttrs: { ...(loco.rawAttrs || {}), id: loco.id } };
+        overlayCachedLcFnOntoLocoProps(st.locoProps, lookupLocoFnCacheSlice(this.perLocoFnCacheById, loco.id));
+        syncLcThrottleIntoRawAttrs(st.locoProps);
+        syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
+      }
+      st.fnScroll = 0;
+      st.view = View.THROTTLE;
+      await this.refreshDevice(deviceId);
+      await this.refreshAllDevicesLocoListVisuals();
     } else if (st.view === View.THROTTLE && st.selectedLoco && this.rocrail) {
       const tv = context != null ? this._throttleViewForOledContext(context) : OLED_THROTTLE_VIEW_FN;
 
@@ -1403,6 +1411,16 @@ class RocrailPlugin {
     }, 50);
   }
 
+  /** Reconnect a few seconds after the Rocrail socket drops; also retries after a refused/failed connect. */
+  _scheduleRocrailReconnect() {
+    if (this._shuttingDown || this._rocrailReconnectTimer) return;
+    this._rocrailReconnectTimer = setTimeout(() => {
+      this._rocrailReconnectTimer = null;
+      void this.initRocrail(false).catch(() => {});
+    }, 3000);
+    this._rocrailReconnectTimer.unref?.();
+  }
+
   async initRocrail(refreshAll = true) {
     this._initRocrailChain = this._initRocrailChain.catch(() => {}).then(() => this._initRocrailImpl(refreshAll));
     return this._initRocrailChain;
@@ -1418,10 +1436,16 @@ class RocrailPlugin {
       this.rocrail = null;
       this._rocrailCatalogLoaded = false;
     }
+    // A client whose socket closed (refused earlier, ECONNRESET, server restart) is
+    // dead weight — drop it so we reconnect below instead of staying offline forever.
+    if (this.rocrail && !this.rocrail.connected) {
+      this.rocrail = null;
+    }
     if (!this.rocrail) {
       this.rocrail = new RocrailClient(host, port, {
         log: (m) => this.log(`[rocrail] ${m}`),
       });
+      this.rocrail.onClose = () => this._scheduleRocrailReconnect();
       try {
         await this.rocrail.connect();
       } catch (e) {
