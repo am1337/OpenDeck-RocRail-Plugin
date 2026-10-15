@@ -1,6 +1,16 @@
 #!/bin/bash
 set -e
 
+# Usage: ./createPackage.sh [version]
+# If a version is given, manifest.json must declare it — otherwise OpenDeck
+# update checks keep seeing the old version (e.g. zip built for v1.0.3 while
+# the manifest still said 1.0.2).
+MANIFEST_VERSION=$(node -e 'console.log(require("./com.marikar.rocrailcontrol.sdPlugin/manifest.json").Version)')
+if [ -n "$1" ] && [ "$1" != "$MANIFEST_VERSION" ]; then
+  echo "error: manifest Version is $MANIFEST_VERSION, expected $1" >&2
+  exit 1
+fi
+echo "packaging version $MANIFEST_VERSION"
 
 cd com.marikar.rocrailcontrol.sdPlugin
 npm ci
