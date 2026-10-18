@@ -261,7 +261,8 @@ export function mergeLcOrFnAttrsIntoLocoProps(locoProps, bodyXml, locoId) {
 export function extractReportedVelocity(bodyXml, locoId) {
   if (!bodyXml || locoId == null) return null;
   let v = null;
-  const lcRe = /<lc\s+([^>]+)\/?>/gi;
+  // `<fn>` pushes can carry V too (mergeLcOrFnAttrsFromAttrMap merges it).
+  const lcRe = /<(?:lc|fn)\s+([^>]+)\/?>/gi;
   let m;
   while ((m = lcRe.exec(bodyXml)) !== null) {
     const a = parseAttrs(m[1]);

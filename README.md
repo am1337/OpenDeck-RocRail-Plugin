@@ -22,7 +22,7 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 
 - [OpenDeck](https://github.com/nekename/OpenDeck)
 - [Rocrail](https://wiki.rocrail.net) running with client access (**Client Service**, default port **8051**), http access (**Rocweb**, default port **8080**) and activated **license key**
-- Node.js **20 or newer** (If missing, please install it. A restart afterwards might be necessary). Using debain or derivates: *sudo apt install nodejs*
+- Node.js **20 or newer** (If missing, please install it. A restart afterwards might be necessary). Using debian or derivates: *sudo apt install nodejs*
 
 ## Build (optional)
 
@@ -66,6 +66,34 @@ For Ajazz AKP03E a recommended configuration is:
 - Assign "List Scroll Dial" to a dial button to be able to scroll through functions in loco control mode.
 
 ![Configuration of Ajazz AKP03E](docs/screenshots/configuration.jpg)
+
+## Debugging
+
+OpenDeck writes one log file per plugin — send it when reporting issues:
+
+- **Linux:** `~/.local/share/opendeck/logs/plugins/com.marikar.rocrailcontrol.log`
+- **macOS:** `~/Library/Logs/opendeck/plugins/com.marikar.rocrailcontrol.log`
+- **Windows:** `%LOCALAPPDATA%\opendeck\logs\plugins\com.marikar.rocrailcontrol.log`
+
+### Verbose logging (`ROCRAIL_PLUGIN_DEBUG`)
+
+For tricky problems (e.g. jumping speed display) enable verbose logging — it logs the full Rocrail XML traffic including reported speed values. The plugin inherits the variable from OpenDeck's process environment, so start OpenDeck with it set:
+
+- **Linux (native):**
+  ```bash
+  ROCRAIL_PLUGIN_DEBUG=1 opendeck
+  ```
+- **Linux (Flatpak):**
+  ```bash
+  flatpak run --env=ROCRAIL_PLUGIN_DEBUG=1 me.amankhanna.opendeck
+  ```
+- **Windows:** open `cmd`, run `set ROCRAIL_PLUGIN_DEBUG=1`, then start OpenDeck from that same window.
+- **macOS:** start the binary directly — variables do not survive `open`:
+  ```bash
+  ROCRAIL_PLUGIN_DEBUG=1 /Applications/OpenDeck.app/Contents/MacOS/opendeck
+  ```
+
+Keep the debug session short (select a loco, reproduce the issue), then send the plugin log — verbose mode grows the file quickly.
 
 ## License
 
