@@ -252,6 +252,25 @@ export function mergeLcOrFnAttrsIntoLocoProps(locoProps, bodyXml, locoId) {
   return any;
 }
 
+/**
+ * Last `V` attribute reported for `locoId` inside a `<lc>` broadcast, or null
+ * when the message carries no velocity. Centrals like ECOS stream interpolated
+ * speed-ramp values, so callers must not treat every report as a fresh
+ * external command.
+ */
+export function extractReportedVelocity(bodyXml, locoId) {
+  if (!bodyXml || locoId == null) return null;
+  let v = null;
+  const lcRe = /<lc\s+([^>]+)\/?>/gi;
+  let m;
+  while ((m = lcRe.exec(bodyXml)) !== null) {
+    const a = parseAttrs(m[1]);
+    if (!idsMatchRocrailLc(a.id, locoId)) continue;
+    if (a.V != null && a.V !== '') v = a.V;
+  }
+  return v;
+}
+
 /** @typedef {Record<string, any> & { rawAttrs?: Record<string, string> }} LocoFnCacheSlice */
 
 /**

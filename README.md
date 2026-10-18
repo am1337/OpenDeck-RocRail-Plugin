@@ -21,8 +21,8 @@ This is the initial version of the plugin, mainly created with Cursor AI and tes
 ## Requirements
 
 - [OpenDeck](https://github.com/nekename/OpenDeck)
-- [Rocrail](https://wiki.rocrail.net) running with client access (**Client Service**, default port **8051**) and http access (**Rocweb**, default port **8080**)
-- Node.js **20 or newer** (If missing, please install it. A restart afterwards might be necessary)
+- [Rocrail](https://wiki.rocrail.net) running with client access (**Client Service**, default port **8051**), http access (**Rocweb**, default port **8080**) and activated **license key**
+- Node.js **20 or newer** (If missing, please install it. A restart afterwards might be necessary). Using debain or derivates: *sudo apt install nodejs*
 
 ## Build (optional)
 

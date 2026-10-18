@@ -16,6 +16,7 @@ import {
   isLocoKmhMode,
   lookupAccessoryEntry,
   lookupLocoFnCacheSlice,
+  extractReportedVelocity,
   mergeLcOrFnAttrsIntoLocoProps,
   overlayCachedLcFnOntoLocoProps,
   rocrailFnIsActive,
@@ -130,6 +131,10 @@ function defaultDeviceState() {
     /** Last locally commanded V%; ignores older Rocrail `<lc>` echoes while active. */
     _velocityGuardV: null,
     _velocityGuardUntil: 0,
+    /** Reported V where the current speed ramp started; defines the interpolation corridor. */
+    _rampStartV: null,
+    /** Last V value seen in an `<lc>` broadcast for the selected loco. */
+    _lastReportedV: null,
   };
 }
 
@@ -955,6 +960,10 @@ class RocrailPlugin {
       }
 
       st.selectedLoco = loco;
+      st._velocityGuardV = null;
+      st._rampStartV = null;
+      st._lastReportedV = null;
+      st._pendingSpeedDelta = 0;
       try {
         await this.rocrail.dispatchLoco(loco.id);
         this._setLocoLock(loco.id, deviceId);
@@ -1154,26 +1163,49 @@ class RocrailPlugin {
   _armLocalVelocityGuard(st, vCmd) {
     if (!st) return;
     st._velocityGuardV = Math.max(0, parseInt(String(vCmd), 10) || 0);
-    st._velocityGuardUntil = Date.now() + 500;
+    st._rampStartV = st._lastReportedV ?? (parseInt(String(st.locoProps?.V ?? 0), 10) || 0);
+    st._velocityGuardUntil = Date.now() + 10000;
   }
 
   /**
-   * While a local velocity command is in flight, keep `locoProps.V` at the commanded value.
-   * Function bits / direction from the same push still apply.
+   * Centrals like ECOS broadcast the simulated acceleration ramp: every `<lc>`
+   * push carries an interpolated `V` that lags the commanded value. While the
+   * reported V is still travelling from `_rampStartV` toward the commanded V
+   * it is interpolation, not an external change — keep the commanded value as
+   * the dial/display base. Reports outside that corridor (direction flip,
+   * overshoot, e.g. an emergency stop set elsewhere) are adopted, and the
+   * guard drops once the server reports the commanded value or the ramp
+   * stalls for ~10 s.
    */
-  _restoreLocalVelocityGuardIfNeeded(st) {
-    if (!st?.locoProps) return false;
-    if (!st._velocityGuardUntil || Date.now() >= st._velocityGuardUntil) return false;
-    if (st._velocityGuardV == null) return false;
-    const cur = Math.max(0, parseInt(String(st.locoProps.V ?? 0), 10) || 0);
-    if (cur === st._velocityGuardV) {
-      // Server caught up — drop the guard early.
-      st._velocityGuardUntil = 0;
-      return false;
+  _handleLocoSpeedReport(st, reportedRaw) {
+    if (reportedRaw == null || !st?.locoProps) return;
+    const reported = Math.max(0, parseInt(String(reportedRaw), 10) || 0);
+    const cmd = st._velocityGuardV;
+    if (cmd == null) {
+      st._lastReportedV = reported;
+      return;
     }
-    st.locoProps.V = st._velocityGuardV;
+    const prev = st._lastReportedV;
+    st._lastReportedV = reported;
+    if (reported === cmd) {
+      st._velocityGuardV = null;
+      return;
+    }
+    const start = st._rampStartV ?? reported;
+    // Small overshoot tolerance: stale echoes from a superseded ramp may pass
+    // `start` briefly, and decoder-step quantization jitters by a few units.
+    const TOL = 10;
+    const inCorridor = cmd > start
+      ? reported >= start - TOL && reported <= cmd
+      : reported >= cmd && reported <= start + TOL;
+    if (!inCorridor || Date.now() > st._velocityGuardUntil) {
+      st._velocityGuardV = null;
+      return;
+    }
+    // Ramp still progressing — extend the guard while fresh reports arrive.
+    if (prev == null || reported !== prev) st._velocityGuardUntil = Date.now() + 10000;
+    st.locoProps.V = cmd;
     syncLcThrottleIntoRawAttrs(st.locoProps);
-    return true;
   }
 
   async onBack(deviceId) {
@@ -1192,6 +1224,10 @@ class RocrailPlugin {
     }
     st.selectedLoco = null;
     st.locoProps = null;
+    st._velocityGuardV = null;
+    st._rampStartV = null;
+    st._lastReportedV = null;
+    st._pendingSpeedDelta = 0;
     st.view = View.LOCO_LIST;
     st.locoScroll = 0;
     st.fnScroll = 0;
@@ -1418,7 +1454,7 @@ class RocrailPlugin {
       if (st.view !== View.THROTTLE || !st.selectedLoco?.id || !st.locoProps) continue;
       if (mergeLcOrFnAttrsIntoLocoProps(st.locoProps, body, st.selectedLoco.id)) {
         // Late velocity echoes from rapid dial must not overwrite the commanded V on the OLED.
-        this._restoreLocalVelocityGuardIfNeeded(st);
+        this._handleLocoSpeedReport(st, extractReportedVelocity(body, st.selectedLoco.id));
         syncLcThrottleIntoRawAttrs(st.locoProps);
         touchedThrottle = true;
         syncLocoFnCacheFromLocoProps(this.perLocoFnCacheById, st.locoProps);
